@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/user.schema.json",
+  "description": "Contract for the user payload returned by the API.",
+  "type": "object",
+  "required": ["id", "name", "email"],
+  "properties": {
+    "id": {
+      "description": "Unique numeric identifier.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "name": {
+      "description": "Display name of the user.",
+      "type": "string",
+      "minLength": 1
+    },
+    "email": {
+      "description": "Primary email address.",
+      "type": "string",
+      "format": "email"
+    }
+  },
+  "additionalProperties": true
+}

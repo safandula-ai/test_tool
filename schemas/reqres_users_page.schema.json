@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Contract for a paginated ReqRes users response.",
+  "type": "object",
+  "required": ["page", "per_page", "total", "total_pages", "data"],
+  "properties": {
+    "page": {"type": "integer", "minimum": 1},
+    "per_page": {"type": "integer", "minimum": 1},
+    "total": {"type": "integer", "minimum": 0},
+    "total_pages": {"type": "integer", "minimum": 1},
+    "data": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "additionalProperties": true
+}

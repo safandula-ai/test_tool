@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Automation Exercise application-level API response.",
+  "type": "object",
+  "required": ["responseCode", "message"],
+  "properties": {
+    "responseCode": {"type": "integer"},
+    "message": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Contract for a user returned by the ReqRes users endpoint.",
+  "type": "object",
+  "required": ["id", "email", "first_name", "last_name", "avatar"],
+  "properties": {
+    "id": {"type": "integer", "minimum": 1},
+    "email": {"type": "string", "format": "email"},
+    "first_name": {"type": "string", "minLength": 1},
+    "last_name": {"type": "string", "minLength": 1},
+    "avatar": {"type": "string", "format": "uri"}
+  },
+  "additionalProperties": true
+}

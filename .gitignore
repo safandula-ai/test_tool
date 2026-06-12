@@ -1,0 +1,24 @@
+# Python caches and environments
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Local secrets and generated artifacts
+.env
+.env.local
+allure-results/
+allure-report/
+logs/*
+reports/*
+!logs/.gitkeep
+!reports/.gitkeep
+playwright-report/
+test-results/
+coverage.xml
+htmlcov/
+.planing/
+.idea/

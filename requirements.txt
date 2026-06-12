@@ -1,0 +1,22 @@
+# Test runner and asynchronous fixture support.
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# Browser automation and asynchronous HTTP communication.
+playwright>=1.45.0
+httpx>=0.27.0
+
+# API contract validation and environment configuration.
+jsonschema>=4.22.0
+python-dotenv>=1.0.0
+
+# Reporting, logging, and dynamic test-data generation.
+allure-pytest>=2.13.0
+loguru>=0.7.2
+faker>=25.0.0
+
+# Human-readable Gherkin scenarios integrated with pytest.
+pytest-bdd>=8.1.0
+
+# Pixel-level visual regression image comparison.
+Pillow>=11.0.0

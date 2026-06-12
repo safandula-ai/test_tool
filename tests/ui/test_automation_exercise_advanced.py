@@ -1,0 +1,82 @@
+"""Advanced live tests for Automation Exercise."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import httpx
+import pytest
+
+from api_clients.automation_exercise_client import AutomationExerciseClient, build_account_payload
+from config.settings import ROOT, get_settings
+from pages.automation_signup_page import AutomationSignupPage
+from utils.visual_regression import assert_visual_match
+
+
+LIVE_ONLY = pytest.mark.skipif(
+    not get_settings().run_live_tests,
+    reason="Set RUN_LIVE_TESTS=true to call Automation Exercise",
+)
+
+
+@pytest.mark.ui
+@pytest.mark.hybrid
+@pytest.mark.asyncio
+@LIVE_ONLY
+async def test_api_created_email_is_rejected_by_ui(page_factory, fake, settings):
+    """Create an account via API and verify duplicate signup through the UI."""
+    email = fake.unique.email()
+    password = "StrongPassword123!"
+    payload = build_account_payload("Hybrid User", email, password)
+
+    async with httpx.AsyncClient(
+        base_url=settings.automation_exercise_base_url,
+        timeout=settings.http_timeout,
+    ) as http_client:
+        api = AutomationExerciseClient(http_client)
+        created = await api.create_account(payload)
+        assert created["responseCode"] == 201
+
+        try:
+            async with page_factory(settings.automation_exercise_base_url) as page:
+                signup = AutomationSignupPage(page)
+                await signup.open()
+                await signup.signup(payload["name"], email)
+                await signup.expect_duplicate_email_error()
+        finally:
+            deleted = await api.delete_account(email, password)
+            assert deleted["responseCode"] == 200
+
+
+@pytest.mark.ui
+@pytest.mark.a11y
+@pytest.mark.asyncio
+@LIVE_ONLY
+async def test_signup_form_has_accessible_controls(page_factory, settings):
+    """Verify accessible names on the critical signup controls."""
+    async with page_factory(settings.automation_exercise_base_url) as page:
+        signup = AutomationSignupPage(page)
+        await signup.open()
+        await signup.expect_signup_form_accessible()
+
+
+@pytest.mark.ui
+@pytest.mark.visual
+@pytest.mark.asyncio
+@LIVE_ONLY
+async def test_signup_form_visual_regression(page_factory, settings):
+    """Compare the signup form with its stored visual baseline."""
+    baseline = ROOT / "data" / "visual" / "automation-signup-form.png"
+    if not baseline.exists() and not settings.update_visual_baselines:
+        pytest.skip("Set UPDATE_VISUAL_BASELINES=true once to create the baseline")
+
+    async with page_factory(settings.automation_exercise_base_url) as page:
+        await page.goto("/login")
+        signup_form = page.locator(".signup-form")
+        await assert_visual_match(
+            signup_form,
+            baseline=baseline,
+            actual=settings.screenshot_dir / "automation-signup-form.actual.png",
+            max_changed_pixel_ratio=0.01,
+            update_baseline=settings.update_visual_baselines,
+        )
