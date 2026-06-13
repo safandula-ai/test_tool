@@ -13,6 +13,8 @@ class AutomationSignupPage(BasePage):
     signup_name = "signup-name"
     signup_email = "signup-email"
     signup_button = "signup-button"
+    login_email = "login-email"
+    login_password = "login-password"
 
     async def open(self) -> None:
         """Open the signup and login page."""
@@ -40,3 +42,17 @@ class AutomationSignupPage(BasePage):
         await expect(self.page.get_by_role("textbox", name="Name")).to_be_visible()
         await expect(self.page.get_by_role("textbox", name="Email Address").last).to_be_visible()
         await expect(self.page.get_by_role("button", name="Signup")).to_be_visible()
+
+    async def expect_login_input_constraints(self) -> None:
+        """Assert browser-level validation constraints on login credentials."""
+        email = self.data_qa(self.login_email)
+        password = self.data_qa(self.login_password)
+
+        await expect(email).to_have_attribute("type", "email")
+        await expect(email).to_have_attribute("required", "")
+        await expect(password).to_have_attribute("type", "password")
+        await expect(password).to_have_attribute("required", "")
+
+        await email.fill("not-an-email")
+        assert await email.evaluate("element => !element.checkValidity()")
+        assert await password.evaluate("element => !element.checkValidity()")

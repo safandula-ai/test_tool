@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from coverage_agent.blueprints import recommend_blueprint
+from coverage_agent.blueprints import recommend_blueprint, recommend_blueprints
 
 
 class GapAnalysisEngine:
@@ -31,12 +31,45 @@ class GapAnalysisEngine:
 
     def execute_diff(self) -> dict[str, Any]:
         """Return deterministic coverage metrics and missing target details."""
-        discovered_ui = set(self.application_map.get("discovered_ui_elements", []))
+        discovered_ui, ui_presence = self._discovered_ui()
         discovered_api = set(self.application_map.get("discovered_api_endpoints", []))
         covered_ui = self._covered(discovered_ui, {"ui", "visual"})
         covered_api = self._covered(discovered_api, {"api"})
         missing_ui = sorted(discovered_ui - covered_ui)
         missing_api = sorted(discovered_api - covered_api)
+
+        missing_ui_details = [
+            {
+                "testid": target,
+                "presence": ui_presence.get(target, "deterministic"),
+                "severity": (
+                    "warning"
+                    if ui_presence.get(target) == "ephemeral"
+                    else "error"
+                ),
+                "suggested_blueprint": recommend_blueprint(target, "ui"),
+                "suggested_blueprints": recommend_blueprints(target, "ui"),
+            }
+            for target in missing_ui
+        ]
+        missing_api_details = [
+            {
+                "endpoint": target,
+                "presence": "deterministic",
+                "severity": "error",
+                "suggested_blueprint": recommend_blueprint(target, "api"),
+                "suggested_blueprints": recommend_blueprints(target, "api"),
+            }
+            for target in missing_api
+        ]
+        errors = [
+            item
+            for item in [*missing_ui_details, *missing_api_details]
+            if item["severity"] == "error"
+        ]
+        warnings = [
+            item for item in missing_ui_details if item["severity"] == "warning"
+        ]
 
         return {
             "page": self.application_map.get("page", "unknown"),
@@ -47,18 +80,33 @@ class GapAnalysisEngine:
                 "total_ui": len(discovered_ui),
                 "covered_api": len(covered_api),
                 "total_api": len(discovered_api),
+                "blocking_gap_count": len(errors),
+                "warning_count": len(warnings),
             },
             "gaps": {
-                "missing_ui_testids": [
-                    {"testid": target, "suggested_blueprint": recommend_blueprint(target, "ui")}
-                    for target in missing_ui
-                ],
-                "missing_api_endpoints": [
-                    {"endpoint": target, "suggested_blueprint": recommend_blueprint(target, "api")}
-                    for target in missing_api
-                ],
+                "missing_ui_testids": missing_ui_details,
+                "missing_api_endpoints": missing_api_details,
             },
+            "errors": errors,
+            "warnings": warnings,
         }
+
+    def _discovered_ui(self) -> tuple[set[str], dict[str, str]]:
+        """Read current and legacy application-map UI target formats."""
+        targets: set[str] = set()
+        presence = dict(self.application_map.get("ui_element_presence", {}))
+        for item in self.application_map.get("discovered_ui_elements", []):
+            if isinstance(item, str):
+                targets.add(item)
+                continue
+            if isinstance(item, dict) and item.get("testid"):
+                target = str(item["testid"])
+                targets.add(target)
+                presence[target] = item.get("presence", "deterministic")
+        for target in targets:
+            if presence.get(target) not in {"deterministic", "ephemeral"}:
+                presence[target] = "deterministic"
+        return targets, presence
 
     def _covered(self, targets: set[str], accepted_types: set[str]) -> set[str]:
         return {
@@ -79,6 +127,10 @@ class GapAnalysisEngine:
         destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         return report
 
+    def has_blocking_gaps(self) -> bool:
+        """Return whether deterministic gaps should fail the pipeline."""
+        return bool(self.execute_diff()["errors"])
+
     def console_report(self) -> str:
         """Render a concise page-level report suitable for CI logs."""
         report = self.execute_diff()
@@ -90,7 +142,14 @@ class GapAnalysisEngine:
             f"API: {metrics['api_coverage_percent']:.1f}% ({metrics['covered_api']}/{metrics['total_api']})",
         ]
         for item in gaps["missing_ui_testids"]:
-            lines.append(f"MISSING UI {item['testid']} -> {item['suggested_blueprint']}")
+            label = "WARNING" if item["severity"] == "warning" else "ERROR"
+            lines.append(
+                f"{label} UI {item['testid']} ({item['presence']}) -> "
+                f"{item['suggested_blueprint']}"
+            )
         for item in gaps["missing_api_endpoints"]:
-            lines.append(f"MISSING API {item['endpoint']} -> {item['suggested_blueprint']}")
+            lines.append(
+                f"ERROR API {item['endpoint']} (deterministic) -> "
+                f"{item['suggested_blueprint']}"
+            )
         return "\n".join(lines)

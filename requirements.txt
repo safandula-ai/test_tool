@@ -4,6 +4,7 @@ pytest-asyncio>=0.23.0
 
 # Browser automation and asynchronous HTTP communication.
 playwright>=1.45.0
+playwright-stealth>=2.0.3,<3.0.0
 httpx>=0.27.0
 
 # API contract validation and environment configuration.

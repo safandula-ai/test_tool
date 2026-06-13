@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from config.settings import get_settings
+from coverage_agent.decorators import covers
 from pages.cart_page import CartPage
 from pages.checkout_page import CheckoutPage
 from pages.inventory_page import InventoryPage
@@ -19,6 +20,12 @@ pytestmark = [
 ]
 
 
+@covers(type="ui", target="login-button", priority="critical", template="InteractionTemplate")
+@covers(type="ui", target="inventory-container", priority="high", template="ComponentVisibilityTemplate")
+@covers(type="ui", target="shopping-cart-link", priority="high", template="InteractionTemplate")
+@covers(type="ui", target="checkout", priority="critical", template="InteractionTemplate")
+@covers(type="ui", target="finish", priority="critical", template="InteractionTemplate")
+@covers(type="ui", target="complete-header", priority="critical", template="ComponentVisibilityTemplate")
 async def test_standard_user_can_complete_purchase(page_factory, settings):
     """Verify login, cart state, and the complete purchase happy path."""
     async with page_factory() as page:
@@ -41,6 +48,8 @@ async def test_standard_user_can_complete_purchase(page_factory, settings):
         await checkout.expect_complete()
 
 
+@covers(type="ui", target="login-button", priority="high", template="InteractionTemplate")
+@covers(type="ui", target="error", priority="high", template="ComponentVisibilityTemplate")
 async def test_locked_user_sees_login_error(page_factory, settings):
     """Verify the locked-user negative login path."""
     async with page_factory() as page:

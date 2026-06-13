@@ -1,0 +1,50 @@
+{
+  "pages": [
+    {
+      "page": "/login",
+      "name": "AccountPage",
+      "features": ["feature:authentication"],
+      "targets": [
+        {
+          "target": "login-submit",
+          "type": "ui",
+          "templates": ["InteractionTemplate"],
+          "feature": "feature:authentication"
+        },
+        {
+          "target": "login-banner",
+          "type": "ui",
+          "templates": ["ComponentVisibilityTemplate"],
+          "feature": "feature:authentication"
+        },
+        {
+          "target": "subscription-form",
+          "type": "ui",
+          "templates": ["FormValidationTemplate", "SubmissionTemplate"],
+          "feature": "feature:subscriptions",
+          "parameters": {
+            "submit_target": "subscription-submit",
+            "success_target": "subscription-success"
+          }
+        }
+      ]
+    },
+    {
+      "page": "/checkout",
+      "name": "CheckoutPage",
+      "features": ["feature:payments"],
+      "targets": [
+        {
+          "target": "discount-code",
+          "type": "ui",
+          "templates": ["InputValidationTemplate", "AppliedCouponAPITemplate"],
+          "feature": "feature:payments",
+          "parameters": {
+            "invalid_values": ["", "EXPIRED", "<script>"],
+            "endpoint": "POST /api/coupons/apply"
+          }
+        }
+      ]
+    }
+  ]
+}

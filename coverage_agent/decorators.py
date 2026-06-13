@@ -8,6 +8,7 @@ from typing import Callable, Literal, TypeVar
 
 CoverageType = Literal["ui", "api", "visual"]
 Priority = Literal["low", "medium", "high", "critical"]
+Presence = Literal["deterministic", "ephemeral"]
 F = TypeVar("F", bound=Callable[..., object])
 
 
@@ -19,6 +20,9 @@ class CoverageMetadata:
     target: str
     priority: Priority = "medium"
     template: str | None = None
+    page: str | None = None
+    feature: str | None = None
+    presence: Presence = "deterministic"
 
 
 def covers(
@@ -27,16 +31,23 @@ def covers(
     target: str,
     priority: Priority = "medium",
     template: str | None = None,
+    page: str | None = None,
+    feature: str | None = None,
+    presence: Presence = "deterministic",
 ) -> Callable[[F], F]:
     """Mark a test as covering a UI target or API endpoint."""
     if type not in {"ui", "api", "visual"}:
         raise ValueError(f"Unsupported coverage type: {type}")
     if priority not in {"low", "medium", "high", "critical"}:
         raise ValueError(f"Unsupported coverage priority: {priority}")
+    if presence not in {"deterministic", "ephemeral"}:
+        raise ValueError(f"Unsupported coverage presence: {presence}")
     if not target.strip():
         raise ValueError("Coverage target cannot be empty")
 
-    metadata = CoverageMetadata(type, target.strip(), priority, template)
+    metadata = CoverageMetadata(
+        type, target.strip(), priority, template, page, feature, presence
+    )
 
     def decorator(function: F) -> F:
         entries = list(getattr(function, "__coverage__", ()))

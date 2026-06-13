@@ -70,9 +70,48 @@ class TestCoverageExtractor(ast.NodeVisitor):
             )
         if metadata["type"] not in {"ui", "api", "visual"}:
             raise CoverageValidationError(f"unsupported type: {metadata['type']}")
+        if metadata.get("presence", "deterministic") not in {
+            "deterministic",
+            "ephemeral",
+        }:
+            raise CoverageValidationError(
+                f"unsupported presence: {metadata['presence']}"
+            )
         metadata.setdefault("priority", "medium")
         metadata.setdefault("template", None)
+        metadata.setdefault("page", None)
+        metadata.setdefault("feature", None)
+        metadata.setdefault("presence", "deterministic")
         return metadata
+
+
+def build_coverage_indexes(
+    coverage_map: dict[str, list[dict[str, Any]]],
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Build reverse indexes used for page, feature, and template execution."""
+    indexes: dict[str, dict[str, list[dict[str, Any]]]] = {
+        "pages": {},
+        "features": {},
+        "templates": {},
+    }
+    for target, entries in coverage_map.items():
+        for entry in entries:
+            reference = {
+                "target": target,
+                "type": entry["type"],
+                "test_function": entry["test_function"],
+                "file_path": entry["file_path"],
+                "presence": entry.get("presence", "deterministic"),
+            }
+            for index_name, field in (
+                ("pages", "page"),
+                ("features", "feature"),
+                ("templates", "template"),
+            ):
+                value = entry.get(field)
+                if value:
+                    indexes[index_name].setdefault(value, []).append(reference)
+    return indexes
 
 
 def generate_coverage_map(
