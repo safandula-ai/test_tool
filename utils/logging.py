@@ -1,9 +1,33 @@
 from __future__ import annotations
 
 import sys
+from contextvars import ContextVar, Token
 from pathlib import Path
 
 from loguru import logger
+
+
+_TEST_LOG_BUFFER: ContextVar[list[str] | None] = ContextVar(
+    "test_log_buffer",
+    default=None,
+)
+
+
+def _capture_test_log(message) -> None:
+    buffer = _TEST_LOG_BUFFER.get()
+    if buffer is None:
+        return
+    buffer.append(str(message).rstrip("\n"))
+
+
+def start_test_log_capture() -> tuple[list[str], Token[list[str] | None]]:
+    buffer: list[str] = []
+    token = _TEST_LOG_BUFFER.set(buffer)
+    return buffer, token
+
+
+def stop_test_log_capture(token: Token[list[str] | None]) -> None:
+    _TEST_LOG_BUFFER.reset(token)
 
 
 def get_logger(level: str = "INFO", log_file: str | Path = "logs/framework.log"):
@@ -23,5 +47,11 @@ def get_logger(level: str = "INFO", log_file: str | Path = "logs/framework.log")
         retention="7 days",
         encoding="utf-8",
         enqueue=True,
+    )
+    logger.add(
+        _capture_test_log,
+        level=level.upper(),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+        enqueue=False,
     )
     return logger

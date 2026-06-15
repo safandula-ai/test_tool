@@ -17,6 +17,7 @@ from coverage_agent.manifests import load_manifests
 from coverage_agent.suite_layout import ensure_website_suite, website_slug
 from coverage_agent.template_engine import DynamicSuiteAssembler
 from coverage_agent.__main__ import main
+from coverage_agent.plugins.automationexercise import AutomationExerciseScraper
 
 
 @covers(type="api", target="coverage-agent://decorators", priority="high", template="APIContractTemplate")
@@ -112,8 +113,15 @@ def test_website_suite_layout_creates_config_smoke_performance_and_generated_pat
     ).read_text(encoding="utf-8")
     assert (suite.root / "smoke" / "test_smoke.py").exists()
     assert (suite.root / "performance" / "test_performance.py").exists()
+    assert (suite.root / "security" / "test_security.py").exists()
     assert suite.generated_test_file.parent.exists()
     smoke_source = (suite.root / "smoke" / "test_smoke.py").read_text(
+        encoding="utf-8"
+    )
+    performance_source = (suite.root / "performance" / "test_performance.py").read_text(
+        encoding="utf-8"
+    )
+    security_source = (suite.root / "security" / "test_security.py").read_text(
         encoding="utf-8"
     )
     assert "playwright.request.new_context" in smoke_source
@@ -126,6 +134,13 @@ def test_website_suite_layout_creates_config_smoke_performance_and_generated_pat
     assert "emit_smoke_diagnostics" in smoke_source
     assert "response_headers = response.headers" in smoke_source
     assert "response_headers = await response.all_headers()" in smoke_source
+    assert "test_homepage_navigation_performance_metrics" in performance_source
+    assert "test_route_renders_under_mobile_throttling" in performance_source
+    assert "Network.emulateNetworkConditions" in performance_source
+    assert 'target="website://example_shop_test/homepage-loading"' in performance_source
+    assert "test_http_security_defense_headers" in security_source
+    assert "test_search_rejects_reflected_xss_payload" in security_source
+    assert "Missing defense headers" in security_source
 
 
 @covers(type="api", target="coverage-agent://discovery/security-challenges", priority="high", template="APIContractTemplate")
@@ -381,15 +396,9 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
             {
                 "page": "/login",
                 "base_url": "https://automationexercise.com",
-                "gaps": {
-                    "missing_ui_testids": [
-                        {
-                            "testid": "login-email",
-                            "suggested_blueprint": "InputValidationTemplate",
-                        }
-                    ],
-                    "missing_api_endpoints": [],
-                },
+                "untested_ui_elements": ["login-email"],
+                "untested_api_endpoints": [],
+                "errors": [],
             }
         ),
         encoding="utf-8",
@@ -402,32 +411,33 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
         base_url_setting="automation_exercise_base_url",
     )
     source = output.read_text(encoding="utf-8")
+    helper = tmp_path / "_test_generated_helpers.py"
+    helper_source = helper.read_text(encoding="utf-8")
 
     assert count == 1
     assert 'target="login-email"' in source
-    assert 'template="InputValidationTemplate"' in source
+    assert 'template="ComponentVisibilityTemplate"' in source
     assert "DEFAULT_BASE_URL = 'https://automationexercise.com'" in source
     assert 'pytestconfig.getoption("--target-url")' in source
-    assert "await _assert_input_validation(target)" in source
+    assert "from ._test_generated_helpers import (" in source
+    assert "target = target_locator(browser_page, " in source
+    assert "def _target(" not in source
+    assert "def target_locator(" in helper_source
+    assert "async def assert_visible(target) -> None:" in helper_source
     compile(source, str(output), "exec")
+    compile(helper_source, str(helper), "exec")
 
 
-@covers(type="api", target="coverage-agent://gap-scaffolder/placeholders", priority="high", template="APIContractTemplate")
-def test_gap_scaffolder_does_not_claim_unsupported_api_coverage(tmp_path):
+@covers(type="api", target="coverage-agent://gap-scaffolder/api", priority="high", template="APIContractTemplate")
+def test_gap_scaffolder_generates_api_tests_from_gap_report(tmp_path):
     report = tmp_path / "gap_report.json"
     report.write_text(
         json.dumps(
             {
                 "page": "/checkout",
-                "gaps": {
-                    "missing_ui_testids": [],
-                    "missing_api_endpoints": [
-                        {
-                            "endpoint": "POST /api/checkout",
-                            "suggested_blueprint": "APIContractTemplate",
-                        }
-                    ],
-                },
+                "untested_ui_elements": [],
+                "untested_api_endpoints": ["POST /api/checkout"],
+                "errors": [],
             }
         ),
         encoding="utf-8",
@@ -437,5 +447,200 @@ def test_gap_scaffolder_does_not_claim_unsupported_api_coverage(tmp_path):
     scaffold_gap_tests(report, output)
     source = output.read_text(encoding="utf-8")
 
-    assert "async def todo_generated_api_post_api_checkout" in source
-    assert "async def test_generated_api_post_api_checkout" not in source
+    assert "async def test_generated_api_post_api_checkout" in source
+    assert 'response = await api_client.request("POST", url)' in source
+    assert "from ._test_generated_helpers import (" not in source
+
+
+@covers(type="api", target="coverage-agent://gap-scaffolder/automationexercise", priority="high", template="APIContractTemplate")
+def test_gap_scaffolder_generates_automationexercise_payload_and_assertions(tmp_path):
+    report = tmp_path / "gap_report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "page": "/api_list",
+                "base_url": "https://automationexercise.com",
+                "untested_ui_elements": [],
+                "untested_api_endpoints": [
+                    {
+                        "method": "POST",
+                        "path": "/api/verifyLogin",
+                        "name": "POST To Verify Login with valid details",
+                        "request_parameters": "email, password",
+                        "response_code": "200",
+                        "response_payload": "User exists!",
+                        "target": "POST /api/verifyLogin :: POST To Verify Login with valid details | status 200",
+                    }
+                ],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "test_generated.py"
+
+    scaffold_gap_tests(report, output)
+    source = output.read_text(encoding="utf-8")
+    helper = tmp_path / "_test_generated_helpers.py"
+    helper_source = helper.read_text(encoding="utf-8")
+
+    assert "from utils.test_diagnostics import httpx_event_hooks" in source
+    assert "from ._test_generated_helpers import (" in source
+    assert "request_kwargs, cleanup_payload = await automationexercise_request_kwargs(" in source
+    assert "request_parameters='email, password'" in source
+    assert 'assert response.status_code == 200' in source
+    assert 'assert response_payload["responseCode"] == int(\'200\')' in source
+    assert 'assert response_payload["message"] == \'User exists!\'' in source
+    assert "from api_clients.automation_exercise_client import build_account_payload" in helper_source
+    assert "async def automationexercise_request_kwargs(" in helper_source
+    assert "async def cleanup_generated_account(" in helper_source
+    assert "def _generated_account_payload" not in source
+    compile(source, str(output), "exec")
+    compile(helper_source, str(helper), "exec")
+
+
+@covers(type="api", target="coverage-agent://automationexercise-scraper", priority="high", template="APIContractTemplate")
+def test_automationexercise_scraper_captures_request_parameters_and_titles():
+    class Page:
+        async def evaluate(self, script):
+            return [
+                "\n".join(
+                    [
+                        "API 7: POST To Verify Login with valid details",
+                        "API URL: https://automationexercise.com/api/verifyLogin",
+                        "Request Method: POST",
+                        "Request Parameters: email, password",
+                        "Response Code: 200",
+                        "Response Message: User exists!",
+                    ]
+                )
+            ]
+
+    endpoints = asyncio.run(AutomationExerciseScraper().scrape(Page()))
+
+    assert endpoints == [
+        {
+            "method": "POST",
+            "name": "POST To Verify Login with valid details",
+            "path": "/api/verifyLogin",
+            "request_parameters": "email, password",
+            "response_code": "200",
+            "response_payload": "User exists!",
+            "response_payload_kind": "message",
+        }
+    ]
+
+
+@covers(type="api", target="coverage-agent://automationexercise-scraper/json-payload", priority="high", template="APIContractTemplate")
+def test_automationexercise_scraper_marks_response_json_payloads():
+    class Page:
+        async def evaluate(self, script):
+            return [
+                "\n".join(
+                    [
+                        "API 99: GET Example JSON Payload",
+                        "API URL: https://automationexercise.com/api/example",
+                        "Request Method: GET",
+                        'Response JSON: {"status":"ok"}',
+                    ]
+                )
+            ]
+
+    endpoints = asyncio.run(AutomationExerciseScraper().scrape(Page()))
+
+    assert endpoints == [
+        {
+            "method": "GET",
+            "name": "GET Example JSON Payload",
+            "path": "/api/example",
+            "response_payload": '{"status":"ok"}',
+            "response_payload_kind": "json",
+        }
+    ]
+
+
+@covers(type="api", target="coverage-agent://gap-scaffolder/response-json", priority="high", template="APIContractTemplate")
+def test_gap_scaffolder_generates_json_response_assertion(tmp_path):
+    report = tmp_path / "gap_report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "page": "/api_list",
+                "base_url": "https://example.test",
+                "untested_ui_elements": [],
+                "untested_api_endpoints": [
+                    {
+                        "method": "GET",
+                        "path": "/api/example",
+                        "name": "GET Example JSON Payload",
+                        "response_payload": '{"status":"ok"}',
+                        "response_payload_kind": "json",
+                        "target": "GET /api/example :: GET Example JSON Payload",
+                    }
+                ],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "test_generated.py"
+
+    scaffold_gap_tests(report, output)
+    source = output.read_text(encoding="utf-8")
+
+    assert 'if \'json\' == "json":' in source
+    assert "assert isinstance(payload, (dict, list))" in source
+    compile(source, str(output), "exec")
+
+
+@covers(type="api", target="coverage-agent://gap-analysis/api-scenarios", priority="high", template="APIContractTemplate")
+def test_gap_analysis_preserves_distinct_api_scenarios():
+    engine = GapAnalysisEngine(
+        {
+            "base_url": "https://automationexercise.com",
+            "page": "/api_list",
+            "discovered_ui_elements": [],
+            "discovered_api_endpoints": [
+                {
+                    "method": "POST",
+                    "path": "/api/verifyLogin",
+                    "name": "POST To Verify Login with valid details",
+                    "request_parameters": "email, password",
+                    "response_code": "200",
+                    "response_payload": "User exists!",
+                },
+                {
+                    "method": "POST",
+                    "path": "/api/verifyLogin",
+                    "name": "POST To Verify Login without email parameter",
+                    "request_parameters": "password",
+                    "response_code": "400",
+                    "response_payload": "Bad request, email or password parameter is missing in POST request.",
+                },
+            ],
+        },
+        {"api_endpoints": []},
+    )
+
+    report = engine.execute_diff()
+
+    assert report["untested_api_endpoints"] == [
+        {
+            "method": "POST",
+            "name": "POST To Verify Login with valid details",
+            "path": "/api/verifyLogin",
+            "request_parameters": "email, password",
+            "response_code": "200",
+            "response_payload": "User exists!",
+            "target": "POST /api/verifyLogin :: POST To Verify Login with valid details | status 200",
+        },
+        {
+            "method": "POST",
+            "name": "POST To Verify Login without email parameter",
+            "path": "/api/verifyLogin",
+            "request_parameters": "password",
+            "response_code": "400",
+            "response_payload": "Bad request, email or password parameter is missing in POST request.",
+            "target": "POST /api/verifyLogin :: POST To Verify Login without email parameter | status 400",
+        },
+    ]

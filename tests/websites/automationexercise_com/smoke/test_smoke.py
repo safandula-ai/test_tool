@@ -7,9 +7,10 @@ import pytest
 from playwright.async_api import async_playwright, expect
 
 from coverage_agent.decorators import covers
-from utils.smoke_diagnostics import emit_smoke_diagnostics
+from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.automationexercise_com.suite_config import (
     BASE_URL,
+    SETTINGS_BASE_URL_ATTR,
     SMOKE_HEALTH_PATH,
     SMOKE_HEALTH_STATUS,
     SMOKE_RENDER_TIMEOUT_MS,
@@ -17,15 +18,7 @@ from tests.websites.automationexercise_com.suite_config import (
     SMOKE_ROOT_PATH,
     SMOKE_ROOT_SELECTOR,
 )
-
-
-def _target_url(pytestconfig):
-    return (pytestconfig.getoption("--target-url") or BASE_URL).rstrip("/")
-
-
-def _require_live_target(pytestconfig, settings):
-    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+from utils.smoke_diagnostics import emit_smoke_diagnostics
 
 
 @pytest.mark.smoke
@@ -41,8 +34,13 @@ def _require_live_target(pytestconfig, settings):
 )
 async def test_backend_gateway_health(pytestconfig, settings):
     """Probe the backend without launching a browser rendering context."""
-    _require_live_target(pytestconfig, settings)
-    base_url = _target_url(pytestconfig)
+    require_live_target(pytestconfig, settings)
+    base_url = resolve_target_url(
+        pytestconfig,
+        settings,
+        default_base_url=BASE_URL,
+        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
+    )
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
         try:
@@ -86,8 +84,13 @@ async def test_backend_gateway_health(pytestconfig, settings):
 )
 async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
     """Fail quickly when navigation or the critical application shell is unavailable."""
-    _require_live_target(pytestconfig, settings)
-    base_url = _target_url(pytestconfig)
+    require_live_target(pytestconfig, settings)
+    base_url = resolve_target_url(
+        pytestconfig,
+        settings,
+        default_base_url=BASE_URL,
+        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
+    )
     async with page_factory(base_url) as page:
         started = perf_counter()
         response = await page.goto(

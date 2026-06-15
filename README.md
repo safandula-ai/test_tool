@@ -44,8 +44,11 @@ Adjust target URLs and credentials in `.env` after copying the example file.
 The framework reads configuration from environment variables and `.env` files.
 
 - `ENV`: `local`, `staging`, or `prod`
-- `BASE_URL`: UI target base URL
+- `BASE_URL`: default UI target base URL, also used by the reusable `tests/one_shot` templates unless `--target-url` is passed
 - `PERFORMANCE_MAX_RESPONSE_MS`: generic performance threshold, default `5000`
+- `PERFORMANCE_MAX_TTFB_MS`: homepage time-to-first-byte threshold for browser performance checks, default `800`
+- `PERFORMANCE_MAX_LOAD_MS`: homepage full-load threshold for browser performance checks, default `3000`
+- `PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS`: throttled mobile interactive threshold, default `10000`
 - `API_BASE_URL`: API target base URL
 - `HEADLESS`: run browser headless when `true`
 - `TRACE_ON_FAILURE`: enable trace capture for failed UI tests
@@ -53,6 +56,12 @@ The framework reads configuration from environment variables and `.env` files.
 - `RUN_LIVE_TESTS`: opt in to tests that call external services
 - `AUTOMATION_EXERCISE_BASE_URL`: UI and API base URL for advanced tests
 - `UPDATE_VISUAL_BASELINES`: create or replace visual regression baselines
+- `ONE_SHOT_SMOKE_*`, `ONE_SHOT_PERF_*`, `ONE_SHOT_SECURITY_*`: optional path and selector overrides for the reusable one-shot templates
+- `API_DOC_URL_KEYWORDS`: API doc labels treated as endpoint URLs
+- `API_DOC_METHOD_KEYWORDS`: API doc labels treated as request methods
+- `API_DOC_REQUEST_PARAMETER_KEYWORDS`: API doc labels treated as request-parameter fields
+- `API_DOC_RESPONSE_CODE_KEYWORDS`: API doc labels treated as response-code fields
+- `API_DOC_RESPONSE_PAYLOAD_KEYWORDS`: API doc labels treated as response-message or payload fields
 
 ## Running Tests
 
@@ -310,7 +319,8 @@ python -m coverage_agent discover --base-url https://automationexercise.com --pa
 
 When `--base-url` is omitted, discovery uses `BASE_URL` from `.env`. Discovery
 creates or reuses `tests/websites/<hostname>/` with `suite_config.py` and the
-standard `api/`, `ui/`, `smoke/`, `performance/`, and `generated/` packages.
+standard `api/`, `ui/`, `smoke/`, `performance/`, `security/`, and `generated/`
+packages.
 
 Use `--auth-state` to load a Playwright storage-state file and `--save-state`
 to save the resulting session. Tune dynamic-page scanning with
@@ -330,24 +340,22 @@ as `ephemeral`, which covers temporary banners, recycled virtual-DOM rows, and
 animation-driven widgets. The application map stores this in
 `ui_element_presence` while retaining the existing target lists.
 
+### API Discovery Plugins
+
+The `coverage_agent` uses a plugin-based architecture for API discovery. Website-specific scrapers are located in the `coverage_agent/plugins` directory and are selected based on the `--base-url`. This allows for customized scraping logic for different websites.
+
+The `automationexercise.com` plugin, for example, is designed to parse the API documentation on the `/api_list` page, including scenario titles, request parameters, response codes, and response messages. Distinct scenarios for the same method and path, such as valid and invalid `POST /api/verifyLogin` flows, are preserved as separate discovered API entries.
+
 3. Compare discovered targets with decorated tests:
 
 ```bash
 python -m coverage_agent gaps
 ```
 
-The report is written to `reports/gap_report.json`. A missing entry resembles:
+The report is written to `reports/gap_report.json`.
+API gaps are emitted with their full scenario metadata when available, so multiple documented outcomes for the same endpoint remain distinct in the report instead of collapsing to one `METHOD /path` entry.
 
-```text
-ERROR UI login-email (deterministic) -> InputValidationTemplate
-WARNING UI temporary-toast (ephemeral) -> ComponentVisibilityTemplate
-```
-
-Deterministic UI gaps and all API gaps are added to `errors`, and the command
-returns exit code `1`. Ephemeral UI gaps are added to `warnings`, receive the
-same blueprint recommendations, and do not fail the build.
-
-4. Scaffold executable checks for supported UI gaps:
+4. Scaffold executable checks for supported UI and API gaps:
 
 ```bash
 python -m coverage_agent scaffold-gaps
@@ -357,9 +365,12 @@ The gap report's `base_url` selects the website suite automatically. For
 example, Automation Exercise output is written to
 `tests/websites/automationexercise_com/generated/test_generated_coverage_gaps.py`.
 Use `--output` only when a custom location is required. Supported UI templates
-generate executable Playwright assertions and literal `@covers` decorators.
-API and domain-specific gaps generate `todo_generated_*` functions without
-active decorators, so unfinished placeholders cannot falsely close a gap.
+and all API gaps generate executable tests with literal `@covers` decorators.
+Generated API tests keep the discovered scenario title and request parameters as
+comments, which is useful when one endpoint has multiple documented behaviors.
+The generated test module now keeps only imports, constants, decorators, and
+test functions. Helper logic is written into a sibling module such as
+`_test_generated_coverage_gaps_helpers.py`.
 
 5. Review and execute the generated tests against the live target:
 
@@ -444,9 +455,16 @@ tests/websites/
 ```
 
 Every website package has `suite_config.py` and consistent `api/`, `ui/`,
-`smoke/`, `performance/`, and `generated/` directories. Generic smoke and
-performance tests use `BASE_URL` by default. Override it directly from the
-terminal:
+`smoke/`, `performance/`, `security/`, and `generated/` directories. Per-site
+paths, selectors, and base-URL resolution hints live in `suite_config.py`.
+Shared runtime helpers such as target resolution, live-target gating, and
+consent dismissal live in `tests/websites/helpers.py`.
+
+Generic website tests use `--target-url` first. If it is omitted, each suite
+falls back to the configured base URL from `suite_config.py`, and may optionally
+map to a settings attribute such as `AUTOMATION_EXERCISE_BASE_URL`.
+
+Override the target directly from the terminal:
 
 Windows PowerShell:
 
@@ -467,6 +485,16 @@ pytest tests/websites/automationexercise_com/performance \
 Passing `--target-url` enables these explicit live checks even when
 `RUN_LIVE_TESTS=false`.
 
+Each website suite also includes:
+
+- performance tests for:
+  - transport response time
+  - browser navigation timing metrics
+  - throttled mobile render timing
+- security tests for:
+  - reflected XSS execution resistance
+  - HTTP security response headers
+
 Each smoke suite contains two critical checks:
 
 - `test_backend_gateway_health` uses Playwright's request context and does not
@@ -480,22 +508,50 @@ status, elapsed milliseconds, response headers, and selector/status
 expectations. The same JSON is attached to the Allure result. Credential-bearing
 headers such as `authorization`, `cookie`, API keys, and tokens are redacted.
 
-All repository tests also print a final `TEST DIAGNOSTICS` JSON block. It is
-written both to the pytest terminal stream and to the individual test's
-captured teardown output, so IDE test runners such as IntelliJ/PyCharm show it
-when that test is selected. It
-contains the test node ID, outcome, duration, markers, and any captured HTTP or
-browser events. Shared HTTPX clients record request URLs, sanitized request and
-response headers, statuses, and elapsed time. Shared Playwright pages record
-document/XHR/fetch responses, failed requests, console warnings/errors, and
-page exceptions. Tests without network or browser activity still report their
-duration, markers, and result. The same payload is attached to Allure.
+All repository tests also publish a final `TEST DIAGNOSTICS` JSON block. It is
+written to the pytest terminal stream and added to the individual test's report
+sections, so IDE test runners such as IntelliJ/PyCharm can show it when that
+test is selected. A separate `test-log` section and Allure attachment contain
+per-test `loguru` output. The diagnostics payload contains the test node ID,
+outcome, duration, markers, and any captured HTTP or browser events. Shared
+HTTPX clients record request URLs, sanitized request and response headers,
+statuses, and elapsed time. Request and response payloads are also captured for
+improved debugging. Tests without network or browser activity still report
+their duration, markers, and result. The same payload is attached to Allure.
 
-Configure these safeguards in each website's `suite_config.py` with
-`SMOKE_HEALTH_PATH`, `SMOKE_HEALTH_STATUS`, `SMOKE_ROOT_PATH`, and
-`SMOKE_ROOT_SELECTOR`. The defaults probe `/`; replace `SMOKE_HEALTH_PATH`
-with a dedicated endpoint such as `/api/v1/health` when the application
-provides one.
+Configure these safeguards in each website's `suite_config.py`. At minimum:
+
+- smoke:
+  - `SMOKE_HEALTH_PATH`
+  - `SMOKE_HEALTH_STATUS`
+  - `SMOKE_ROOT_PATH`
+  - `SMOKE_ROOT_SELECTOR`
+- performance:
+  - `PERF_HOME_PATH`
+  - `PERF_HOME_READY_SELECTOR`
+  - `PERF_MOBILE_PATH`
+  - `PERF_MOBILE_READY_SELECTOR`
+- security:
+  - `SECURITY_SEARCH_PATH`
+  - `SECURITY_SEARCH_INPUT_SELECTOR`
+  - `SECURITY_SEARCH_SUBMIT_SELECTOR`
+  - `SECURITY_CONSENT_*`
+
+The defaults probe `/`; replace `SMOKE_HEALTH_PATH` with a dedicated endpoint
+such as `/api/v1/health` when the application provides one.
+
+### One-Shot Templates
+
+Reusable live-target templates are available under `tests/one_shot/`:
+
+- `test_smoke.py`
+- `test_performance.py`
+- `test_security.py`
+
+These are intended to be copied into a dedicated website suite and adjusted for
+that site's selectors and routes. By default they read `BASE_URL` from `.env`,
+but `--target-url` overrides it at runtime. Optional `ONE_SHOT_*` environment
+variables allow quick experimentation without editing the files.
 
 Run only API tests:
 
@@ -568,7 +624,11 @@ coverage_agent/
   gap_analysis.py            Coverage correlation, errors, and warnings
   gap_scaffolder.py          Executable generated gap tests
   manifests.py               Test-manifest loading and validation
-  suite_layout.py            Website package and smoke/performance scaffolding
+  plugins/                   Website-specific API discovery plugins
+    __init__.py
+    base.py
+    automationexercise.py
+  suite_layout.py            Website package and smoke/performance/security scaffolding
   template_engine.py         Dynamic suite assembly and test selection
   __main__.py                coverage_agent command-line entry point
 data/                        Test data and visual baselines
@@ -582,11 +642,13 @@ tests/
   features/
     authentication/          Feature configuration, UI, and BDD login tests
   unit/                      Deterministic framework and agent tests
+  one_shot/                  Copyable smoke, performance, and security templates
   websites/
-    automationexercise_com/  API, UI, smoke, performance, generated tests
-    reqres_in/                API, smoke, performance, generated tests
-    saucedemo_com/            UI, smoke, performance, generated tests
-    toptal_com/               Smoke, performance, and generated tests
+    helpers.py               Shared helpers for website suites
+    automationexercise_com/  API, UI, smoke, performance, security, generated tests
+    reqres_in/               API, smoke, performance, security, generated tests
+    saucedemo_com/           UI, smoke, performance, security, generated tests
+    toptal_com/              Smoke, performance, security, generated tests
 utils/                       Allure, logging, mocks, schema, and visual helpers
 ```
 

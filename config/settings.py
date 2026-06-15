@@ -13,6 +13,17 @@ load_dotenv(ROOT / ".env")
 
 
 @dataclass(frozen=True)
+class ApiDocSettings:
+    """Settings for parsing API documentation."""
+
+    url_keywords: list[str]
+    method_keywords: list[str]
+    request_parameter_keywords: list[str]
+    response_code_keywords: list[str]
+    response_payload_keywords: list[str]
+
+
+@dataclass(frozen=True)
 class Settings:
     """Resolved runtime configuration for the test framework."""
 
@@ -36,6 +47,7 @@ class Settings:
     artifact_dir: Path
     screenshot_dir: Path
     video_dir: Path
+    api_doc_settings: ApiDocSettings
 
 
 def _bool(name: str, default: str = "false") -> bool:
@@ -76,4 +88,14 @@ def get_settings() -> Settings:
         artifact_dir=artifact_dir,
         screenshot_dir=screenshot_dir,
         video_dir=video_dir,
+        api_doc_settings=ApiDocSettings(
+            url_keywords=os.getenv("API_DOC_URL_KEYWORDS", "API URL:,Request URL:").split(","),
+            method_keywords=os.getenv("API_DOC_METHOD_KEYWORDS", "Request Method:").split(","),
+            request_parameter_keywords=os.getenv(
+                "API_DOC_REQUEST_PARAMETER_KEYWORDS",
+                "Request Parameters:,Request Parameter:",
+            ).split(","),
+            response_code_keywords=os.getenv("API_DOC_RESPONSE_CODE_KEYWORDS", "Response Code:").split(","),
+            response_payload_keywords=os.getenv("API_DOC_RESPONSE_PAYLOAD_KEYWORDS", "Response JSON:,Response Message:,Response Payload:").split(","),
+        ),
     )

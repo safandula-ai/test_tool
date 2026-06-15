@@ -10,6 +10,9 @@ from urllib.parse import urlsplit
 from playwright.async_api import Page, Request, TimeoutError as PlaywrightTimeoutError, async_playwright
 from playwright_stealth import Stealth
 
+from config.settings import get_settings
+from .plugins import get_scraper
+
 
 IGNORED_NETWORK_TOKENS = ("analytics", "telemetry", "google-analytics")
 TARGET_ATTRIBUTES = ("data-testid", "data-test", "data-qa")
@@ -27,10 +30,12 @@ class PlaywrightDiscoveryEngine:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
         self.discovered_ui_elements: set[str] = set()
-        self.discovered_api_endpoints: set[str] = set()
+        self.discovered_api_endpoints: list[dict[str, str]] = []
         self.ui_element_presence: dict[str, str] = {}
         self.security_challenge_status = "not_detected"
         self.security_challenge_selector: str | None = None
+        self.settings = get_settings()
+        self.scraper = get_scraper(base_url)
 
     async def handle_cookie_banner(self, page: Page) -> None:
         """Dismiss a common consent banner when one is visible."""
@@ -95,9 +100,10 @@ class PlaywrightDiscoveryEngine:
         """Record relevant API requests as ``METHOD /path`` signatures."""
         signature = self.endpoint_signature(request.method, request.url)
         if signature:
-            self.discovered_api_endpoints.add(signature)
+            if signature not in self.discovered_api_endpoints:
+                self.discovered_api_endpoints.append(signature)
 
-    def endpoint_signature(self, method: str, url: str) -> str | None:
+    def endpoint_signature(self, method: str, url: str) -> dict[str, str] | None:
         """Normalize an in-scope API URL into a stable endpoint signature."""
         parsed = urlsplit(url)
         base = urlsplit(self.base_url)
@@ -105,7 +111,7 @@ class PlaywrightDiscoveryEngine:
             return None
         if any(token in url.lower() for token in IGNORED_NETWORK_TOKENS):
             return None
-        return f"{method.upper()} {parsed.path}"
+        return {"method": method.upper(), "path": parsed.path}
 
     async def harvest_ui_elements(self, page: Page) -> set[str]:
         """Collect all currently attached stable target attributes."""
@@ -207,7 +213,13 @@ class PlaywrightDiscoveryEngine:
             context = await browser.new_context(**context_options)
             await Stealth().apply_stealth_async(context)
             page = await context.new_page()
-            page.on("request", lambda request: asyncio.create_task(self.monitor_network(request)))
+            
+            async def filter_and_monitor(request: Request):
+                if request.resource_type in ("fetch", "xhr") or "/api/" in request.url:
+                    await self.monitor_network(request)
+            
+            page.on("request", lambda request: asyncio.create_task(filter_and_monitor(request)))
+            
             try:
                 await page.goto(
                     f"{self.base_url}/{target_path.lstrip('/')}",
@@ -219,6 +231,8 @@ class PlaywrightDiscoveryEngine:
                 )
                 if challenge_cleared:
                     await self.handle_cookie_banner(page)
+                    if self.scraper:
+                        self.discovered_api_endpoints = await self.scraper.scrape(page)
                     await self.execute_progressive_multi_pass_scan(
                         page,
                         distance=scan_distance,
@@ -236,7 +250,13 @@ class PlaywrightDiscoveryEngine:
     def application_manifest(self, page: str) -> dict[str, object]:
         """Build a deterministic application map."""
         normalized_page = "/" + page.lstrip("/")
-        return {
+        
+        unique_endpoints = []
+        for ep in self.discovered_api_endpoints:
+            if ep not in unique_endpoints:
+                unique_endpoints.append(ep)
+                
+        manifest = {
             "page": normalized_page,
             "base_url": self.base_url,
             "scan_status": (
@@ -253,8 +273,9 @@ class PlaywrightDiscoveryEngine:
                 target: self.ui_element_presence.get(target, "deterministic")
                 for target in sorted(self.discovered_ui_elements)
             },
-            "discovered_api_endpoints": sorted(self.discovered_api_endpoints),
+            "discovered_api_endpoints": sorted(unique_endpoints, key=lambda x: (x['path'], x['method'], x.get('response_code', ''))),
         }
+        return manifest
 
     def write_application_manifest(self, page: str, output_file: str | Path) -> None:
         """Write the current application map to JSON."""

@@ -6,6 +6,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
+from urllib.parse import parse_qsl
 
 import httpx
 import pytest
@@ -22,6 +23,7 @@ class TestDiagnosticRecorder:
     nodeid: str
     started: float = field(default_factory=time.perf_counter)
     events: list[dict[str, Any]] = field(default_factory=list)
+    log_lines: list[str] = field(default_factory=list)
 
     def record(self, category: str, **values: Any) -> None:
         self.events.append({"category": category, **values})
@@ -43,16 +45,67 @@ class TestDiagnosticRecorder:
         }
 
 
+def render_test_diagnostics(
+    item: pytest.Item,
+    recorder: TestDiagnosticRecorder,
+) -> str:
+    """Return the rendered per-test diagnostics payload."""
+    return json.dumps(recorder.payload(item), indent=2, sort_keys=True)
+
+
+def append_report_diagnostics(
+    report: pytest.TestReport,
+    rendered: str,
+    log_lines: list[str] | None = None,
+) -> None:
+    """Publish diagnostics into native pytest captured-output sections."""
+    when = report.when
+    report.sections.append((f"Captured stdout {when}", f"TEST DIAGNOSTICS\n{rendered}"))
+    if log_lines:
+        report.sections.append((f"Captured log {when}", "\n".join(log_lines)))
+
+
 def httpx_event_hooks(recorder: TestDiagnosticRecorder) -> dict[str, list[Any]]:
     """Build async HTTPX hooks that record requests and sanitized responses."""
 
+    def decode_payload(content: bytes, content_type: str | None) -> Any:
+        if not content:
+            return None
+        normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+        if normalized_type == "application/x-www-form-urlencoded":
+            return dict(parse_qsl(content.decode("utf-8", errors="replace")))
+        try:
+            return json.loads(content.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            text_content = content.decode("utf-8", errors="replace")
+            return text_content if len(text_content) < 1000 else text_content[:1000] + "... [truncated]"
+
     async def on_request(request: httpx.Request) -> None:
         request.extensions["diagnostic_started"] = time.perf_counter()
+
+        payload = None
+        try:
+            content = request.content
+        except Exception:
+            content = b""
+        if not content:
+            try:
+                await request.aread()
+                content = request.content
+            except Exception:
+                content = b""
+        if content:
+            try:
+                payload = decode_payload(content, request.headers.get("content-type"))
+            except Exception:
+                payload = "<unreadable content>"
+
         recorder.record(
             "http_request",
             method=request.method,
             url=str(request.url),
             request_headers=sanitize_headers(dict(request.headers)),
+            payload=payload,
         )
 
     async def on_response(response: httpx.Response) -> None:
@@ -60,6 +113,18 @@ def httpx_event_hooks(recorder: TestDiagnosticRecorder) -> dict[str, list[Any]]:
         elapsed_ms = (
             (time.perf_counter() - started) * 1000 if isinstance(started, float) else None
         )
+        payload = None
+        try:
+            await response.aread()
+            content = response.content
+            if content:
+                try:
+                    payload = response.json()
+                except json.JSONDecodeError:
+                    payload = decode_payload(content, response.headers.get("content-type"))
+        except Exception:
+            payload = "<unreadable content>"
+
         recorder.record(
             "http_response",
             method=response.request.method,
@@ -67,6 +132,7 @@ def httpx_event_hooks(recorder: TestDiagnosticRecorder) -> dict[str, list[Any]]:
             status=response.status_code,
             elapsed_ms=round(elapsed_ms, 1) if elapsed_ms is not None else None,
             response_headers=sanitize_headers(dict(response.headers)),
+            payload=payload,
         )
 
     return {"request": [on_request], "response": [on_response]}
@@ -79,7 +145,7 @@ def emit_test_diagnostics(
 ) -> dict[str, Any]:
     """Write diagnostics to terminal, per-test capture, and Allure."""
     payload = recorder.payload(item)
-    rendered = json.dumps(payload, indent=2, sort_keys=True)
+    rendered = render_test_diagnostics(item, recorder)
     print(f"TEST DIAGNOSTICS\n{rendered}", flush=True)
     terminal = pytestconfig.pluginmanager.get_plugin("terminalreporter")
     if terminal is not None:
@@ -92,6 +158,12 @@ def emit_test_diagnostics(
             name="test-diagnostics",
             attachment_type=allure.attachment_type.JSON,
         )
+        if recorder.log_lines:
+            allure.attach(
+                "\n".join(recorder.log_lines),
+                name="test-log",
+                attachment_type=allure.attachment_type.TEXT,
+            )
     except (ImportError, RuntimeError):
         pass
     return payload

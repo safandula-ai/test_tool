@@ -1,24 +1,38 @@
-"""Critical availability smoke tests for this website suite."""
+"""Reusable one-shot smoke tests for a live website target.
 
-from urllib.parse import urljoin
+Copy this file into a dedicated website suite and replace the selectors/paths below.
+By default the target comes from `BASE_URL`; pass `--target-url` to override it.
+"""
+
+from __future__ import annotations
+
+import os
 from time import perf_counter
+from urllib.parse import urljoin
 
 import pytest
 from playwright.async_api import async_playwright, expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
-from tests.websites.reqres_in.suite_config import (
-    BASE_URL,
-    SETTINGS_BASE_URL_ATTR,
-    SMOKE_HEALTH_PATH,
-    SMOKE_HEALTH_STATUS,
-    SMOKE_RENDER_TIMEOUT_MS,
-    SMOKE_REQUEST_TIMEOUT_MS,
-    SMOKE_ROOT_PATH,
-    SMOKE_ROOT_SELECTOR,
-)
 from utils.smoke_diagnostics import emit_smoke_diagnostics
+
+
+DEFAULT_BASE_URL = os.getenv("BASE_URL", "https://example.test")
+SMOKE_HEALTH_PATH = os.getenv("ONE_SHOT_SMOKE_HEALTH_PATH", "/")
+SMOKE_HEALTH_STATUS = int(os.getenv("ONE_SHOT_SMOKE_HEALTH_STATUS", "200"))
+SMOKE_ROOT_PATH = os.getenv("ONE_SHOT_SMOKE_ROOT_PATH", "/")
+SMOKE_ROOT_SELECTOR = os.getenv("ONE_SHOT_SMOKE_ROOT_SELECTOR", "body")
+SMOKE_REQUEST_TIMEOUT_MS = int(os.getenv("ONE_SHOT_SMOKE_REQUEST_TIMEOUT_MS", "5000"))
+SMOKE_RENDER_TIMEOUT_MS = int(os.getenv("ONE_SHOT_SMOKE_RENDER_TIMEOUT_MS", "8000"))
+
+
+def _target_url(pytestconfig):
+    return (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL).rstrip("/")
+
+
+def _require_live_target(pytestconfig, settings):
+    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
+        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
 
 
 @pytest.mark.smoke
@@ -27,20 +41,14 @@ from utils.smoke_diagnostics import emit_smoke_diagnostics
 @pytest.mark.asyncio
 @covers(
     type="api",
-    target="website://reqres_in/backend-gateway-health",
+    target="website://one_shot/backend-gateway-health",
     priority="critical",
     presence="deterministic",
     template="APIContractTemplate",
 )
 async def test_backend_gateway_health(pytestconfig, settings):
-    """Probe the backend without launching a browser rendering context."""
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        settings,
-        default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
-    )
+    _require_live_target(pytestconfig, settings)
+    base_url = _target_url(pytestconfig)
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
         try:
@@ -55,6 +63,7 @@ async def test_backend_gateway_health(pytestconfig, settings):
             response_headers = response.headers
         finally:
             await request_context.dispose()
+
     emit_smoke_diagnostics(
         pytestconfig,
         check="backend-gateway-health",
@@ -77,20 +86,14 @@ async def test_backend_gateway_health(pytestconfig, settings):
 @pytest.mark.asyncio
 @covers(
     type="ui",
-    target="website://reqres_in/homepage-root",
+    target="website://one_shot/homepage-root",
     priority="critical",
     presence="deterministic",
     template="ComponentVisibilityTemplate",
 )
 async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
-    """Fail quickly when navigation or the critical application shell is unavailable."""
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        settings,
-        default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
-    )
+    _require_live_target(pytestconfig, settings)
+    base_url = _target_url(pytestconfig)
     async with page_factory(base_url) as page:
         started = perf_counter()
         response = await page.goto(
@@ -115,4 +118,4 @@ async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
             },
         )
         assert response.ok, f"Homepage returned HTTP {response.status}"
-        await expect(page.locator(SMOKE_ROOT_SELECTOR).first).to_be_visible(timeout=5_000)
+        await expect(page.locator(SMOKE_ROOT_SELECTOR).first).to_be_visible(timeout=5000)

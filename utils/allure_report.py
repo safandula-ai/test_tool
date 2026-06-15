@@ -8,6 +8,9 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 _ADJECTIVES = ("bright", "calm", "clear", "quick", "steady", "vivid")
@@ -45,6 +48,7 @@ def _unique_report_dir(archive: Path, report_name: str | None) -> Path:
 
 
 def _run_allure(command: list[str]) -> subprocess.CompletedProcess[str]:
+    logger.info(f"Running Allure command: {' '.join(command)}")
     return subprocess.run(
         command,
         capture_output=True,
@@ -67,7 +71,7 @@ def generate_allure_report(
     if executable is None:
         return AllureGenerationResult(
             "cli_missing",
-            "Allure CLI was not found on PATH; raw results remain available.",
+            "Allure CLI was not found on PATH. Please install it from https://allurereport.org/",
         )
     if not results.exists() or not any(results.iterdir()):
         return AllureGenerationResult(

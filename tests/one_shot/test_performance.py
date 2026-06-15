@@ -1,4 +1,10 @@
-"""Performance tests for this website suite."""
+"""Reusable one-shot performance tests for a live website target.
+
+Copy this file into a dedicated website suite and replace the route/selector constants below.
+By default the target comes from `BASE_URL`; pass `--target-url` to override it.
+"""
+
+from __future__ import annotations
 
 import os
 import time
@@ -9,27 +15,29 @@ import pytest
 from playwright.async_api import expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
-from tests.websites.saucedemo_com.suite_config import (
-    BASE_URL,
-    PERF_HOME_PATH,
-    PERF_HOME_READY_SELECTOR,
-    PERF_MOBILE_PATH,
-    PERF_MOBILE_READY_SELECTOR,
-    SETTINGS_BASE_URL_ATTR,
-)
 from utils.test_diagnostics import httpx_event_hooks
+
+
+DEFAULT_BASE_URL = os.getenv("BASE_URL", "https://example.test")
+PERF_HOME_PATH = os.getenv("ONE_SHOT_PERF_HOME_PATH", "/")
+PERF_HOME_READY_SELECTOR = os.getenv("ONE_SHOT_PERF_HOME_READY_SELECTOR", "body")
+PERF_MOBILE_PATH = os.getenv("ONE_SHOT_PERF_MOBILE_PATH", "/")
+PERF_MOBILE_READY_SELECTOR = os.getenv("ONE_SHOT_PERF_MOBILE_READY_SELECTOR", "body")
+
+
+def _target_url(pytestconfig):
+    return (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL).rstrip("/")
+
+
+def _require_live_target(pytestconfig, settings):
+    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
+        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
 
 
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_target_response_time(
-    target_url,
-    live_target_enabled,
-    settings,
-    test_diagnostics,
-):
+async def test_target_response_time(target_url, live_target_enabled, settings, test_diagnostics):
     if not live_target_enabled:
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
     maximum_ms = float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))
@@ -50,7 +58,7 @@ async def test_target_response_time(
 @pytest.mark.asyncio
 @covers(
     type="visual",
-    target="website://saucedemo_com/homepage-loading",
+    target="website://one_shot/homepage-loading",
     priority="high",
     template="PerformanceTemplate",
     page="/",
@@ -62,13 +70,8 @@ async def test_homepage_navigation_performance_metrics(
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        settings,
-        default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
-    )
+    _require_live_target(pytestconfig, settings)
+    base_url = _target_url(pytestconfig)
     max_ttfb_ms = float(os.getenv("PERFORMANCE_MAX_TTFB_MS", "800"))
     max_load_ms = float(os.getenv("PERFORMANCE_MAX_LOAD_MS", "3000"))
 
@@ -97,8 +100,14 @@ async def test_homepage_navigation_performance_metrics(
             }"""
         )
     test_diagnostics.record("performance_metrics", route=PERF_HOME_PATH, **metrics)
-    assert metrics["time_to_first_byte_ms"] < max_ttfb_ms
-    assert metrics["load_event_complete_ms"] < max_load_ms
+    assert metrics["time_to_first_byte_ms"] < max_ttfb_ms, (
+        f"SLA violation: TTFB {metrics['time_to_first_byte_ms']:.1f} ms exceeds "
+        f"{max_ttfb_ms:.1f} ms"
+    )
+    assert metrics["load_event_complete_ms"] < max_load_ms, (
+        f"SLA violation: full load {metrics['load_event_complete_ms']:.1f} ms exceeds "
+        f"{max_load_ms:.1f} ms"
+    )
 
 
 @pytest.mark.performance
@@ -106,7 +115,7 @@ async def test_homepage_navigation_performance_metrics(
 @pytest.mark.asyncio
 @covers(
     type="visual",
-    target="website://saucedemo_com/mobile-throttled-interactive",
+    target="website://one_shot/mobile-throttled-interactive",
     priority="high",
     template="PerformanceTemplate",
     page="/",
@@ -118,13 +127,8 @@ async def test_route_renders_under_mobile_throttling(
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        settings,
-        default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
-    )
+    _require_live_target(pytestconfig, settings)
+    base_url = _target_url(pytestconfig)
     max_interactive_ms = float(os.getenv("PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS", "10000"))
 
     async with page_factory(base_url) as page:
@@ -154,4 +158,6 @@ async def test_route_renders_under_mobile_throttling(
             cpu_throttle_rate=4,
             network_profile="slow_3g_like",
         )
-        assert elapsed_ms <= max_interactive_ms
+        assert elapsed_ms <= max_interactive_ms, (
+            f"Interactive time {elapsed_ms:.1f} ms exceeds {max_interactive_ms:.1f} ms"
+        )

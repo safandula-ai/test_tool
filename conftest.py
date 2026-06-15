@@ -15,12 +15,14 @@ from playwright.async_api import Page, async_playwright
 from config.settings import Settings, get_settings
 from utils.api_mocks import build_transport
 from utils.allure_report import generate_allure_report
-from utils.logging import get_logger
+from utils.logging import get_logger, start_test_log_capture, stop_test_log_capture
 from utils.smoke_diagnostics import sanitize_headers
 from utils.test_diagnostics import (
     TestDiagnosticRecorder,
+    append_report_diagnostics,
     emit_test_diagnostics,
     httpx_event_hooks,
+    render_test_diagnostics,
 )
 
 
@@ -69,7 +71,13 @@ def test_diagnostics(request: pytest.FixtureRequest) -> Iterator[TestDiagnosticR
     """Create a recorder for every test, including unit and skipped tests."""
     recorder = TestDiagnosticRecorder(request.node.nodeid)
     setattr(request.node, "diagnostic_recorder", recorder)
-    yield recorder
+    log_buffer, log_token = start_test_log_capture()
+    setattr(request.node, "diagnostic_log_buffer", log_buffer)
+    try:
+        yield recorder
+    finally:
+        recorder.log_lines.extend(log_buffer)
+        stop_test_log_capture(log_token)
     emit_test_diagnostics(request.config, request.node, recorder)
 
 
@@ -79,7 +87,7 @@ def fake() -> Faker:
     return Faker()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def logger(settings: Settings):
     """Expose the configured project logger."""
     return get_logger(settings.log_level)
@@ -227,6 +235,16 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     outcome = yield
     report = outcome.get_result()
     setattr(item, f"rep_{report.when}", report)
+    recorder = getattr(item, "diagnostic_recorder", None)
+    if recorder is None:
+        return
+    log_buffer = getattr(item, "diagnostic_log_buffer", [])
+    if report.when == "call":
+        rendered = render_test_diagnostics(item, recorder)
+        append_report_diagnostics(report, rendered, list(log_buffer))
+    elif report.when == "setup" and report.failed:
+        rendered = render_test_diagnostics(item, recorder)
+        append_report_diagnostics(report, rendered, list(log_buffer))
 
 
 @pytest.hookimpl(trylast=True)
