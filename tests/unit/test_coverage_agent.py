@@ -14,6 +14,7 @@ from coverage_agent.discovery import PlaywrightDiscoveryEngine
 from coverage_agent.gap_analysis import GapAnalysisEngine
 from coverage_agent.gap_scaffolder import scaffold_gap_tests
 from coverage_agent.manifests import load_manifests
+from coverage_agent.suite_layout import ensure_website_suite, website_slug
 from coverage_agent.template_engine import DynamicSuiteAssembler
 from coverage_agent.__main__ import main
 
@@ -95,6 +96,36 @@ def test_discovery_normalizes_and_filters_api_requests():
     )
     assert engine.endpoint_signature("GET", "https://other.test/api/orders") is None
     assert engine.endpoint_signature("GET", "https://example.test/api/analytics/events") is None
+
+
+@covers(type="api", target="coverage-agent://suite-layout", priority="high", template="APIContractTemplate")
+def test_website_suite_layout_creates_config_smoke_performance_and_generated_paths(tmp_path):
+    suite = ensure_website_suite(
+        "https://www.example-shop.test/catalog",
+        tmp_path / "websites",
+    )
+
+    assert website_slug("https://www.example-shop.test") == "example_shop_test"
+    assert suite.root.name == "example_shop_test"
+    assert 'BASE_URL = "https://www.example-shop.test/catalog"' in (
+        suite.root / "suite_config.py"
+    ).read_text(encoding="utf-8")
+    assert (suite.root / "smoke" / "test_smoke.py").exists()
+    assert (suite.root / "performance" / "test_performance.py").exists()
+    assert suite.generated_test_file.parent.exists()
+    smoke_source = (suite.root / "smoke" / "test_smoke.py").read_text(
+        encoding="utf-8"
+    )
+    assert "playwright.request.new_context" in smoke_source
+    assert "test_backend_gateway_health" in smoke_source
+    assert "test_homepage_shell_renders" in smoke_source
+    assert 'timeout=SMOKE_REQUEST_TIMEOUT_MS' in smoke_source
+    assert 'timeout=SMOKE_RENDER_TIMEOUT_MS' in smoke_source
+    assert 'timeout=5_000' in smoke_source
+    assert 'target="website://example_shop_test/backend-gateway-health"' in smoke_source
+    assert "emit_smoke_diagnostics" in smoke_source
+    assert "response_headers = response.headers" in smoke_source
+    assert "response_headers = await response.all_headers()" in smoke_source
 
 
 @covers(type="api", target="coverage-agent://discovery/security-challenges", priority="high", template="APIContractTemplate")
@@ -349,6 +380,7 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
         json.dumps(
             {
                 "page": "/login",
+                "base_url": "https://automationexercise.com",
                 "gaps": {
                     "missing_ui_testids": [
                         {
@@ -374,6 +406,8 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
     assert count == 1
     assert 'target="login-email"' in source
     assert 'template="InputValidationTemplate"' in source
+    assert "DEFAULT_BASE_URL = 'https://automationexercise.com'" in source
+    assert 'pytestconfig.getoption("--target-url")' in source
     assert "await _assert_input_validation(target)" in source
     compile(source, str(output), "exec")
 

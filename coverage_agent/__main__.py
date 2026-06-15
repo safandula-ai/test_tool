@@ -7,11 +7,13 @@ import asyncio
 import json
 from pathlib import Path
 
+from config.settings import get_settings
 from coverage_agent.analyzer import build_coverage_indexes, generate_coverage_map
 from coverage_agent.discovery import PlaywrightDiscoveryEngine
 from coverage_agent.gap_analysis import GapAnalysisEngine
 from coverage_agent.gap_scaffolder import scaffold_gap_tests
 from coverage_agent.manifests import load_manifests
+from coverage_agent.suite_layout import ensure_website_suite
 from coverage_agent.template_engine import DynamicSuiteAssembler
 
 
@@ -24,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--output", default="reports/coverage_map.json")
 
     discover = commands.add_parser("discover", help="Generate application_map.json")
-    discover.add_argument("--base-url", required=True)
+    discover.add_argument("--base-url", default=get_settings().base_url)
     discover.add_argument("--path", default="/")
     discover.add_argument("--output", default="reports/application_map.json")
     discover.add_argument("--auth-state")
@@ -58,13 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     scaffold = commands.add_parser("scaffold-gaps", help="Generate executable tests for gaps")
     scaffold.add_argument("--report", default="reports/gap_report.json")
-    scaffold.add_argument("--output", default="tests/generated/test_generated_coverage_gaps.py")
+    scaffold.add_argument("--output")
     scaffold.add_argument("--base-url-setting", default="base_url")
     scaffold.add_argument("--feature", default="feature:generated-gap-coverage")
     return parser
 
 
 async def _discover(args: argparse.Namespace) -> dict[str, object]:
+    if not args.base_url:
+        raise ValueError("Provide --base-url or set BASE_URL")
+    suite = ensure_website_suite(args.base_url)
     engine = PlaywrightDiscoveryEngine(args.base_url)
     manifest = await engine.scrape_page(
         args.path,
@@ -78,6 +83,7 @@ async def _discover(args: argparse.Namespace) -> dict[str, object]:
         challenge_timeout_ms=args.challenge_timeout_ms,
     )
     engine.write_application_manifest(args.path, args.output)
+    print(f"Website suite: {suite.root}")
     return manifest
 
 
@@ -125,13 +131,20 @@ def main() -> int:
         )
         print(f"Wrote coverage indexes to {args.output}")
     else:
+        report = json.loads(Path(args.report).read_text(encoding="utf-8"))
+        output = args.output
+        if output is None:
+            base_url = report.get("base_url")
+            if not base_url:
+                raise ValueError("Gap report has no base_url; pass --output explicitly")
+            output = str(ensure_website_suite(base_url).generated_test_file)
         count = scaffold_gap_tests(
             args.report,
-            args.output,
+            output,
             base_url_setting=args.base_url_setting,
             feature=args.feature,
         )
-        print(f"Generated {count} gap test(s) in {args.output}")
+        print(f"Generated {count} gap test(s) in {output}")
     return 0
 
 

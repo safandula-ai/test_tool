@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from typing import AsyncContextManager
@@ -12,13 +14,63 @@ from playwright.async_api import Page, async_playwright
 
 from config.settings import Settings, get_settings
 from utils.api_mocks import build_transport
+from utils.allure_report import generate_allure_report
 from utils.logging import get_logger
+from utils.smoke_diagnostics import sanitize_headers
+from utils.test_diagnostics import (
+    TestDiagnosticRecorder,
+    emit_test_diagnostics,
+    httpx_event_hooks,
+)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register runtime target overrides for generic website suites."""
+    parser.addoption(
+        "--target-url",
+        action="store",
+        default=None,
+        help="Override BASE_URL for smoke, performance, and generated website tests",
+    )
+    parser.addoption(
+        "--no-allure-report",
+        action="store_true",
+        help="Collect Allure results but skip automatic HTML report generation",
+    )
+    parser.addoption(
+        "--allure-report-dir",
+        dest="generated_allure_report_dir",
+        default="allure-report",
+        help="Archive directory for timestamped Allure HTML reports and history",
+    )
 
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     """Expose shared runtime settings to tests."""
     return get_settings()
+
+
+@pytest.fixture(scope="session")
+def target_url(pytestconfig: pytest.Config, settings: Settings) -> str:
+    """Resolve a terminal URL override, falling back to BASE_URL."""
+    value = pytestconfig.getoption("--target-url") or settings.base_url
+    return value.rstrip("/")
+
+
+@pytest.fixture(scope="session")
+def live_target_enabled(pytestconfig: pytest.Config, settings: Settings) -> bool:
+    """Allow explicit terminal targets even when global live tests are disabled."""
+    return settings.run_live_tests or bool(pytestconfig.getoption("--target-url"))
+
+
+@pytest.fixture(autouse=True)
+def test_diagnostics(request: pytest.FixtureRequest) -> Iterator[TestDiagnosticRecorder]:
+    """Create a recorder for every test, including unit and skipped tests."""
+    recorder = TestDiagnosticRecorder(request.node.nodeid)
+    setattr(request.node, "diagnostic_recorder", recorder)
+    yield recorder
+    emit_test_diagnostics(request.config, request.node, recorder)
 
 
 @pytest.fixture(scope="session")
@@ -34,26 +86,34 @@ def logger(settings: Settings):
 
 
 @pytest_asyncio.fixture
-async def api_client(settings: Settings) -> AsyncIterator[httpx.AsyncClient]:
+async def api_client(
+    settings: Settings,
+    test_diagnostics: TestDiagnosticRecorder,
+) -> AsyncIterator[httpx.AsyncClient]:
     """Provide an async HTTP client bound to the API base URL."""
     transport = build_transport()
     client = httpx.AsyncClient(
         base_url=settings.api_base_url,
         transport=transport,
         timeout=settings.http_timeout,
+        event_hooks=httpx_event_hooks(test_diagnostics),
     )
     yield client
     await client.aclose()
 
 
 @pytest_asyncio.fixture
-async def reqres_http_client(settings: Settings) -> AsyncIterator[httpx.AsyncClient]:
+async def reqres_http_client(
+    settings: Settings,
+    test_diagnostics: TestDiagnosticRecorder,
+) -> AsyncIterator[httpx.AsyncClient]:
     """Provide an authenticated client for opt-in live ReqRes tests."""
     headers = {"x-api-key": settings.reqres_api_key} if settings.reqres_api_key else {}
     client = httpx.AsyncClient(
         base_url=settings.reqres_base_url,
         headers=headers,
         timeout=settings.http_timeout,
+        event_hooks=httpx_event_hooks(test_diagnostics),
     )
     yield client
     await client.aclose()
@@ -63,6 +123,7 @@ async def reqres_http_client(settings: Settings) -> AsyncIterator[httpx.AsyncCli
 def page_factory(
     request: pytest.FixtureRequest,
     settings: Settings,
+    test_diagnostics: TestDiagnosticRecorder,
 ) -> Callable[[str | None], AsyncContextManager[Page]]:
     """Build isolated async Playwright pages without async pytest fixtures."""
 
@@ -81,9 +142,71 @@ def page_factory(
                 await context.tracing.start(screenshots=True, snapshots=True, sources=True)
 
             page = await context.new_page()
+            test_diagnostics.record(
+                "browser_page_opened",
+                base_url=base_url or settings.base_url,
+                initial_url=page.url,
+            )
+            pending_diagnostics: set[asyncio.Task[None]] = set()
+
+            async def record_response(response) -> None:
+                if response.request.resource_type not in {"document", "xhr", "fetch"}:
+                    return
+                test_diagnostics.record(
+                    "browser_response",
+                    resource_type=response.request.resource_type,
+                    method=response.request.method,
+                    url=response.url,
+                    status=response.status,
+                    response_headers=sanitize_headers(await response.all_headers()),
+                )
+
+            def schedule_response(response) -> None:
+                task = asyncio.create_task(record_response(response))
+                pending_diagnostics.add(task)
+                task.add_done_callback(pending_diagnostics.discard)
+
+            page.on("response", schedule_response)
+            page.on(
+                "requestfailed",
+                lambda failed_request: test_diagnostics.record(
+                    "browser_request_failed",
+                    method=failed_request.method,
+                    url=failed_request.url,
+                    failure=failed_request.failure,
+                ),
+            )
+            page.on(
+                "console",
+                lambda message: test_diagnostics.record(
+                    "browser_console",
+                    level=message.type,
+                    text=message.text,
+                )
+                if message.type in {"error", "warning"}
+                else None,
+            )
+            page.on(
+                "pageerror",
+                lambda error: test_diagnostics.record(
+                    "browser_page_error",
+                    message=str(error),
+                ),
+            )
             try:
                 yield page
             finally:
+                if pending_diagnostics:
+                    await asyncio.gather(*pending_diagnostics, return_exceptions=True)
+                try:
+                    final_title = await page.title()
+                except Exception:
+                    final_title = "<unavailable>"
+                test_diagnostics.record(
+                    "browser_page_final_state",
+                    url=page.url,
+                    title=final_title,
+                )
                 failed = getattr(request.node, "rep_call", None) and request.node.rep_call.failed
                 if failed and settings.screenshot_on_failure:
                     await page.screenshot(path=str(settings.screenshot_dir / f"{request.node.name}.png"), full_page=True)
@@ -104,3 +227,27 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     outcome = yield
     report = outcome.get_result()
     setattr(item, f"rep_{report.when}", report)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Generate the persistent Allure report after result writers finish."""
+    if session.config.getoption("--no-allure-report"):
+        return
+
+    results_dir = session.config.getoption("allure_report_dir") or "allure-results"
+    report_dir = session.config.getoption("generated_allure_report_dir")
+    result = generate_allure_report(results_dir, report_dir)
+    terminal = session.config.pluginmanager.get_plugin("terminalreporter")
+    if terminal is not None:
+        prefix = "ALLURE" if result.succeeded else "ALLURE WARNING"
+        terminal.write_line(f"{prefix}: {result.message}")
+
+    required = os.getenv("ALLURE_REPORT_REQUIRED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if required and not result.succeeded and exitstatus == pytest.ExitCode.OK:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

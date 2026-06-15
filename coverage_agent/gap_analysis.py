@@ -73,6 +73,7 @@ class GapAnalysisEngine:
 
         return {
             "page": self.application_map.get("page", "unknown"),
+            "base_url": self.application_map.get("base_url"),
             "metrics": {
                 "ui_coverage_percent": self._percentage(len(covered_ui), len(discovered_ui)),
                 "api_coverage_percent": self._percentage(len(covered_api), len(discovered_api)),

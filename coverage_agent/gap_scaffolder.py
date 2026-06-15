@@ -30,7 +30,7 @@ def _identifier(value: str) -> str:
     return normalized or "target"
 
 
-def load_gap_cases(report_path: str | Path) -> tuple[str, list[GapCase]]:
+def load_gap_cases(report_path: str | Path) -> tuple[str, str | None, list[GapCase]]:
     """Load UI and API gap cases from a gap report."""
     with Path(report_path).open(encoding="utf-8") as file:
         report = json.load(file)
@@ -54,7 +54,7 @@ def load_gap_cases(report_path: str | Path) -> tuple[str, list[GapCase]]:
         )
         for item in gaps.get("missing_api_endpoints", [])
     )
-    return page, cases
+    return page, report.get("base_url"), cases
 
 
 def _ui_assertion(template: str) -> str:
@@ -69,6 +69,7 @@ def render_gap_tests(
     page: str,
     cases: list[GapCase],
     *,
+    base_url: str | None = None,
     base_url_setting: str = "base_url",
     feature: str = "feature:generated-gap-coverage",
 ) -> str:
@@ -80,17 +81,14 @@ from __future__ import annotations
 import pytest
 from playwright.async_api import expect
 
-from config.settings import get_settings
 from coverage_agent.decorators import covers
 
+
+DEFAULT_BASE_URL = {base_url!r}
 
 pytestmark = [
     pytest.mark.ui,
     pytest.mark.asyncio,
-    pytest.mark.skipif(
-        not get_settings().run_live_tests,
-        reason="Set RUN_LIVE_TESTS=true to execute generated browser gap tests",
-    ),
 ]
 
 
@@ -128,8 +126,13 @@ async def _assert_interaction(target) -> None:
         if case.coverage_type == "ui" and case.template in SUPPORTED_UI_TEMPLATES:
             functions.append(
                 f'''\n\n{decorator}
-async def test_generated_{name}(page_factory, settings):
-    async with page_factory(getattr(settings, {base_url_setting!r})) as browser_page:
+async def test_generated_{name}(page_factory, pytestconfig, settings):
+    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
+        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+    base_url = pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL
+    if base_url is None:
+        base_url = getattr(settings, {base_url_setting!r})
+    async with page_factory(base_url) as browser_page:
         await browser_page.goto({page!r})
         target = _target(browser_page, {target_literal})
         {_ui_assertion(case.template)}
@@ -154,13 +157,14 @@ def scaffold_gap_tests(
     feature: str = "feature:generated-gap-coverage",
 ) -> int:
     """Generate a pytest module and return the number of scaffolded gaps."""
-    page, cases = load_gap_cases(report_path)
+    page, base_url, cases = load_gap_cases(report_path)
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
         render_gap_tests(
             page,
             cases,
+            base_url=base_url,
             base_url_setting=base_url_setting,
             feature=feature,
         ),

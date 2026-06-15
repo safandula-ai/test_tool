@@ -238,6 +238,7 @@ class PlaywrightDiscoveryEngine:
         normalized_page = "/" + page.lstrip("/")
         return {
             "page": normalized_page,
+            "base_url": self.base_url,
             "scan_status": (
                 "blocked_by_security_challenge"
                 if self.security_challenge_status == "unresolved"

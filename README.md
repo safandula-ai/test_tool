@@ -6,10 +6,38 @@ The example integrations target SauceDemo for browser E2E coverage, ReqRes for p
 
 ## Quick Start
 
-1. Create and activate a virtual environment.
-2. Install dependencies from `requirements.txt`.
-3. Copy `.env.example` to `.env` and adjust the target URLs.
-4. Install Playwright browsers with `playwright install`.
+### Windows PowerShell
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item .env.example .env
+playwright install chromium
+```
+
+### Linux
+
+Debian or Ubuntu prerequisites:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3 python3-venv python3-pip
+```
+
+Project setup:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+playwright install --with-deps chromium
+```
+
+Adjust target URLs and credentials in `.env` after copying the example file.
 
 ## Environment Setup
 
@@ -17,6 +45,7 @@ The framework reads configuration from environment variables and `.env` files.
 
 - `ENV`: `local`, `staging`, or `prod`
 - `BASE_URL`: UI target base URL
+- `PERFORMANCE_MAX_RESPONSE_MS`: generic performance threshold, default `5000`
 - `API_BASE_URL`: API target base URL
 - `HEADLESS`: run browser headless when `true`
 - `TRACE_ON_FAILURE`: enable trace capture for failed UI tests
@@ -38,20 +67,40 @@ pytest
 `allure-pytest` is installed through `requirements.txt` and collects test
 results. The separate Allure CLI is required to render or open the HTML report.
 
-The Python virtual environment does not provide the `allure` executable. On
-Windows, install a Java runtime and the standalone CLI. This machine has
-`winget`, so Java can be installed with:
+The Python virtual environment does not provide the `allure` executable. Allure
+Report 2 runs on Java, so install a Java runtime first. On Windows:
 
 ```powershell
 winget install --id EclipseAdoptium.Temurin.17.JRE --exact
+java -version
 ```
 
-Then download the latest `allure-*.zip` from the official Allure releases,
-extract it, and add its `bin` directory to the user `PATH`:
+### Install Allure On Windows
 
-https://github.com/allure-framework/allure2/releases
+The official Allure project recommends Scoop for Windows. Install Scoop for
+the current user, then install Allure:
 
-For example, if extracted to `C:\Tools\allure`:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+scoop install allure
+```
+
+Close and reopen PowerShell, then verify the installation:
+
+```powershell
+allure --version
+Get-Command allure
+```
+
+If Scoop is not permitted, use the manual installation instead:
+
+1. Download the latest `allure-*.zip` asset from the official releases page:
+
+   https://github.com/allure-framework/allure2/releases
+
+2. Extract it, for example to `C:\Tools\allure`.
+3. Add its `bin` directory to the user `PATH`:
 
 ```powershell
 $allureBin = "C:\Tools\allure\bin"
@@ -62,7 +111,7 @@ $allureBin = "C:\Tools\allure\bin"
 )
 ```
 
-Close and reopen PowerShell after changing `PATH`, then verify both commands:
+Close and reopen PowerShell after changing `PATH`, then verify:
 
 ```powershell
 java -version
@@ -70,26 +119,161 @@ allure --version
 ```
 
 Do not prefix Allure commands with `python`. `allure` is a standalone command,
-not a Python module.
+not a Python module. If `allure --version` still fails, confirm that
+`C:\Tools\allure\bin\allure.bat` exists and that the new terminal sees the
+updated user `PATH`.
 
-Run tests and replace previous Allure results:
+If Allure reports that `JAVA_HOME` is missing or invalid, locate the installed
+Temurin directory and set it without adding quotes to the stored value:
 
 ```powershell
-pytest --alluredir=allure-results --clean-alluredir
+$javaHome = Get-ChildItem "C:\Program Files\Eclipse Adoptium" -Directory |
+  Where-Object { Test-Path (Join-Path $_.FullName "bin\java.exe") } |
+  Select-Object -First 1 -ExpandProperty FullName
+
+[Environment]::SetEnvironmentVariable("JAVA_HOME", $javaHome, "User")
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  [Environment]::GetEnvironmentVariable("Path", "User") + ";" +
+    (Join-Path $javaHome "bin"),
+  "User"
+)
+```
+
+Open a new PowerShell window and verify:
+
+```powershell
+echo $env:JAVA_HOME
+java -version
+allure --version
+```
+
+### Install Allure On Linux
+
+On Debian or Ubuntu, install Java and the download utilities first:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y openjdk-17-jre-headless curl jq
+java -version
+```
+
+Download the latest official Allure release, extract it under `/opt`, and add
+an executable link to `/usr/local/bin`:
+
+```bash
+ALLURE_VERSION=$(curl -fsSL \
+  https://api.github.com/repos/allure-framework/allure2/releases/latest |
+  jq -r .tag_name)
+curl -fsSL -o /tmp/allure.tgz \
+  "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz"
+sudo mkdir -p /opt/allure
+sudo tar -xzf /tmp/allure.tgz -C /opt/allure --strip-components=1
+sudo ln -sf /opt/allure/bin/allure /usr/local/bin/allure
+allure --version
+```
+
+If Allure cannot find Java, persist `JAVA_HOME` in your shell configuration:
+
+```bash
+JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")
+echo "export JAVA_HOME=$JAVA_HOME" >> ~/.bashrc
+echo 'export PATH="$JAVA_HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+java -version
+allure --version
+```
+
+Every pytest run replaces the temporary `allure-results/` directory and creates
+a new archived report under `allure-report/` when the standalone Allure CLI is
+on `PATH`. Report directories use a sortable timestamp and readable random
+suffix, for example `20260615-143045-clear-harbor`, so previous reports are not
+overwritten:
+
+```bash
+pytest
+```
+
+If the CLI is unavailable, pytest preserves its normal exit code and prints an
+`ALLURE WARNING`. Set `ALLURE_REPORT_REQUIRED=true` in CI to fail an otherwise
+successful run when HTML generation is unavailable or fails. Disable only the
+HTML generation step with `pytest --no-allure-report`; raw results are still
+collected.
+
+Require successful HTML generation in CI:
+
+Windows PowerShell:
+
+```powershell
+$env:ALLURE_REPORT_REQUIRED = "true"
+pytest
+```
+
+Linux:
+
+```bash
+ALLURE_REPORT_REQUIRED=true pytest
 ```
 
 Generate a temporary report and open it in a browser:
 
-```powershell
+```bash
 allure serve allure-results
 ```
 
-Generate and open a persistent report in `allure-report/`:
+Generate a timestamped persistent single-file report in `allure-report/`. Each
+run contains an `index.html` that can be opened directly from the filesystem.
+`allure-report/latest.txt` contains the absolute path of the newest run.
+`allure-report/.history/` stores Allure trend data and is copied into the next
+run automatically.
+
+Windows PowerShell:
 
 ```powershell
-allure generate allure-results --clean -o allure-report
-allure open allure-report
+./scripts/generate_allure_report.ps1
+$latest = Get-Content ./allure-report/latest.txt
+Start-Process (Join-Path $latest "index.html")
 ```
+
+Linux:
+
+```bash
+python scripts/generate_allure_report.py
+LATEST=$(cat ./allure-report/latest.txt)
+xdg-open "$LATEST/index.html"
+```
+
+After installation, a normal test run performs the full workflow:
+
+```bash
+pytest
+# Open the run referenced by allure-report/latest.txt.
+```
+
+Provide a custom run name when needed. If that directory already exists, the
+generator appends `-2`, `-3`, and so on instead of replacing it:
+
+Windows PowerShell:
+
+```powershell
+./scripts/generate_allure_report.ps1 -Name "release-2026-06"
+```
+
+Linux:
+
+```bash
+python scripts/generate_allure_report.py --name "release-2026-06"
+```
+
+Older multi-file Allure reports must be opened through `allure open
+allure-report`; opening their `index.html` through `file://` causes `Failed to
+fetch` errors because browsers block the report's JSON requests. This project
+uses Allure's `--single-file` mode to avoid that restriction.
+
+Official references:
+
+- https://github.com/allure-framework/allure2
+- https://github.com/allure-framework/allure2/releases
 
 ## Coverage Gap Agent
 
@@ -111,7 +295,7 @@ Tests declare the UI element or API endpoint they cover with `@covers`:
 
 1. Generate the static coverage map from test decorators:
 
-```powershell
+```bash
 python -m coverage_agent analyze --tests tests --output reports/coverage_map.json
 ```
 
@@ -120,9 +304,13 @@ python -m coverage_agent analyze --tests tests --output reports/coverage_map.jso
    attributes, records same-site `/api/` traffic, and applies
    `playwright-stealth` before creating browser pages:
 
-```powershell
+```bash
 python -m coverage_agent discover --base-url https://automationexercise.com --path /login
 ```
+
+When `--base-url` is omitted, discovery uses `BASE_URL` from `.env`. Discovery
+creates or reuses `tests/websites/<hostname>/` with `suite_config.py` and the
+standard `api/`, `ui/`, `smoke/`, `performance/`, and `generated/` packages.
 
 Use `--auth-state` to load a Playwright storage-state file and `--save-state`
 to save the resulting session. Tune dynamic-page scanning with
@@ -144,7 +332,7 @@ animation-driven widgets. The application map stores this in
 
 3. Compare discovered targets with decorated tests:
 
-```powershell
+```bash
 python -m coverage_agent gaps
 ```
 
@@ -161,27 +349,36 @@ same blueprint recommendations, and do not fail the build.
 
 4. Scaffold executable checks for supported UI gaps:
 
-```powershell
-python -m coverage_agent scaffold-gaps `
-  --base-url-setting automation_exercise_base_url
+```bash
+python -m coverage_agent scaffold-gaps
 ```
 
-This replaces only `tests/generated/test_generated_coverage_gaps.py`. Supported
-UI templates generate executable Playwright assertions and literal `@covers`
-decorators. API and domain-specific gaps generate `todo_generated_*` functions
-without active decorators, so unfinished placeholders cannot falsely close a
-gap.
+The gap report's `base_url` selects the website suite automatically. For
+example, Automation Exercise output is written to
+`tests/websites/automationexercise_com/generated/test_generated_coverage_gaps.py`.
+Use `--output` only when a custom location is required. Supported UI templates
+generate executable Playwright assertions and literal `@covers` decorators.
+API and domain-specific gaps generate `todo_generated_*` functions without
+active decorators, so unfinished placeholders cannot falsely close a gap.
 
 5. Review and execute the generated tests against the live target:
 
+Windows PowerShell:
+
 ```powershell
 $env:RUN_LIVE_TESTS = "true"
-pytest tests/generated/test_generated_coverage_gaps.py
+pytest tests/websites/automationexercise_com/generated
+```
+
+Linux:
+
+```bash
+RUN_LIVE_TESTS=true pytest tests/websites/automationexercise_com/generated
 ```
 
 6. Regenerate metadata and confirm the result:
 
-```powershell
+```bash
 python -m coverage_agent analyze
 python -m coverage_agent gaps
 ```
@@ -223,7 +420,7 @@ API: 100.0% (0/0)
 Page manifests in `config/test_manifests.json` bind discovered targets to
 reusable templates and `feature:*` groups. Assemble and select suites with:
 
-```powershell
+```bash
 python -m coverage_agent assemble --application reports/application_map.json
 python -m coverage_agent indexes
 python -m coverage_agent select --template FormValidationTemplate
@@ -233,6 +430,72 @@ python -m coverage_agent select --page /login --feature feature:authentication
 Unbound targets receive complementary template recommendations. For example,
 `subscription-form` maps to form validation and submission templates, while
 `discount-code` maps to input validation and coupon API templates.
+
+### Website Suites
+
+Provider tests are grouped by hostname:
+
+```text
+tests/websites/
+  automationexercise_com/
+  reqres_in/
+  saucedemo_com/
+  toptal_com/
+```
+
+Every website package has `suite_config.py` and consistent `api/`, `ui/`,
+`smoke/`, `performance/`, and `generated/` directories. Generic smoke and
+performance tests use `BASE_URL` by default. Override it directly from the
+terminal:
+
+Windows PowerShell:
+
+```powershell
+pytest tests/websites/reqres_in/smoke --target-url https://reqres.in
+pytest tests/websites/automationexercise_com/performance `
+  --target-url https://automationexercise.com
+```
+
+Linux:
+
+```bash
+pytest tests/websites/reqres_in/smoke --target-url https://reqres.in
+pytest tests/websites/automationexercise_com/performance \
+  --target-url https://automationexercise.com
+```
+
+Passing `--target-url` enables these explicit live checks even when
+`RUN_LIVE_TESTS=false`.
+
+Each smoke suite contains two critical checks:
+
+- `test_backend_gateway_health` uses Playwright's request context and does not
+  launch a browser. It requires the configured status within 5 seconds.
+- `test_homepage_shell_renders` requires navigation within 8 seconds and the
+  configured application-shell selector to become visible within 5 seconds.
+
+Successful smoke checks print a `SMOKE DIAGNOSTICS` JSON block even with
+pytest output capture enabled. It includes the request method, final URL, HTTP
+status, elapsed milliseconds, response headers, and selector/status
+expectations. The same JSON is attached to the Allure result. Credential-bearing
+headers such as `authorization`, `cookie`, API keys, and tokens are redacted.
+
+All repository tests also print a final `TEST DIAGNOSTICS` JSON block. It is
+written both to the pytest terminal stream and to the individual test's
+captured teardown output, so IDE test runners such as IntelliJ/PyCharm show it
+when that test is selected. It
+contains the test node ID, outcome, duration, markers, and any captured HTTP or
+browser events. Shared HTTPX clients record request URLs, sanitized request and
+response headers, statuses, and elapsed time. Shared Playwright pages record
+document/XHR/fetch responses, failed requests, console warnings/errors, and
+page exceptions. Tests without network or browser activity still report their
+duration, markers, and result. The same payload is attached to Allure.
+
+Configure these safeguards in each website's `suite_config.py` with
+`SMOKE_HEALTH_PATH`, `SMOKE_HEALTH_STATUS`, `SMOKE_ROOT_PATH`, and
+`SMOKE_ROOT_SELECTOR`. The defaults probe `/`; replace `SMOKE_HEALTH_PATH`
+with a dedicated endpoint such as `/api/v1/health` when the application
+provides one.
 
 Run only API tests:
 
@@ -292,30 +555,55 @@ RUN_LIVE_TESTS=true pytest -m visual
 
 ## Structure
 
-- `api_clients/`: asynchronous HTTP clients and endpoint signatures
-- `coverage_agent/`: coverage discovery, analysis, templates, and CLI
-- `coverage_agent/analyzer.py`: AST extraction and coverage indexes
-- `coverage_agent/blueprints.py`: reusable template definitions and matching rules
-- `coverage_agent/decorators.py`: `@covers` runtime metadata
-- `coverage_agent/discovery.py`: Playwright UI and API surface discovery
-- `coverage_agent/gap_analysis.py`: application-to-test coverage correlation
-- `coverage_agent/gap_scaffolder.py`: generated tests for supported gaps
-- `coverage_agent/manifests.py`: page and feature manifest validation
-- `coverage_agent/template_engine.py`: dynamic suite assembly and test selection
-- `config/settings.py`: environment and runtime settings
-- `config/test_manifests.json`: page, feature, target, and template associations
-- `pages/`: asynchronous and synchronous Playwright page objects
-- `schemas/`: JSON Schema API contracts
-- `tests/api/`: API and contract tests
-- `tests/ui/`: UI, accessibility, visual, hybrid, and E2E tests
-- `tests/bdd/`: Gherkin scenarios and synchronous Playwright steps
-- `tests/unit/`: deterministic coverage-agent tests
-- `tests/generated/`: gap tests created on demand by `scaffold-gaps`
-- `utils/`: logging, mocks, test data, schema, and visual helpers
-- `reports/application_map.json`: latest discovered application surface
-- `reports/coverage_map.json`: target-indexed `@covers` metadata
-- `reports/coverage_indexes.json`: page, feature, and template reverse indexes
-- `reports/gap_report.json`: latest metrics and missing coverage targets
+```text
+api_clients/                 Async API clients and endpoint wrappers
+config/
+  settings.py                Environment and runtime settings
+  test_manifests.json        Page, feature, target, and template bindings
+coverage_agent/
+  analyzer.py                Static @covers extraction and reverse indexes
+  blueprints.py              Reusable test templates and recommendations
+  decorators.py              Runtime @covers metadata
+  discovery.py               Playwright UI/API discovery and challenge handling
+  gap_analysis.py            Coverage correlation, errors, and warnings
+  gap_scaffolder.py          Executable generated gap tests
+  manifests.py               Test-manifest loading and validation
+  suite_layout.py            Website package and smoke/performance scaffolding
+  template_engine.py         Dynamic suite assembly and test selection
+  __main__.py                coverage_agent command-line entry point
+data/                        Test data and visual baselines
+pages/                       Async and synchronous Playwright page objects
+schemas/                     JSON Schema API contracts
+scripts/
+  generate_allure_report.py  Cross-platform Allure HTML generator
+  generate_allure_report.ps1 PowerShell wrapper for report generation
+tests/
+  api/                       Provider-neutral mocked API contracts
+  features/
+    authentication/          Feature configuration, UI, and BDD login tests
+  unit/                      Deterministic framework and agent tests
+  websites/
+    automationexercise_com/  API, UI, smoke, performance, generated tests
+    reqres_in/                API, smoke, performance, generated tests
+    saucedemo_com/            UI, smoke, performance, generated tests
+    toptal_com/               Smoke, performance, and generated tests
+utils/                       Allure, logging, mocks, schema, and visual helpers
+```
+
+Generated runtime output:
+
+- `allure-results/`: temporary raw Allure files, replaced on each pytest run
+- `allure-report/<timestamp>-<random-name>/`: immutable single-file report runs
+- `allure-report/.history/`: trend history used by subsequent report runs
+- `allure-report/latest.txt`: absolute path of the newest generated report
+- `reports/`: coverage maps, gap reports, traces, screenshots, and videos
+- `logs/`: framework execution logs
+
+Root configuration:
+
+- `conftest.py`: shared fixtures, URL overrides, artifacts, and Allure generation
+- `pytest.ini`: test discovery, markers, asyncio, and Allure result collection
+- `.env` / `.env.example`: local runtime configuration and documented defaults
 
 ## Integration Boundary
 
