@@ -27,13 +27,23 @@ class GapCase:
 
 
 def _identifier(value: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    sanitized = re.sub(
+        r"\b[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\b",
+        "record_id",
+        value.lower(),
+    )
+    normalized = re.sub(r"[^a-z0-9]+", "_", sanitized).strip("_")
     return normalized or "target"
 
 
 def _helper_module_name(output_path: str | Path) -> str:
     destination = Path(output_path)
     return f"_{destination.stem}_helpers.py"
+
+
+def _data_file_name(output_path: str | Path) -> str:
+    destination = Path(output_path)
+    return f"_{destination.stem}_data.json"
 
 
 def load_gap_cases(report_path: str | Path) -> tuple[str, str | None, list[GapCase]]:
@@ -85,10 +95,14 @@ def _api_case_metadata(case: GapCase) -> tuple[str, str, list[str]]:
             comment_lines.append(
                 f"# Expected Response Code: {case.api_details['response_code']}"
             )
-        if case.api_details.get("response_payload"):
-            comment_lines.append(
-                f"# Expected Response Message: {case.api_details['response_payload']}"
-            )
+        response_payload = str(case.api_details.get("response_payload", "")).strip()
+        if response_payload:
+            if len(response_payload) <= 120 and "\n" not in response_payload:
+                comment_lines.append(
+                    f"# Expected Response Message: {case.api_details['response_payload']}"
+                )
+            else:
+                comment_lines.append("# Expected Response Payload: see generated case data")
         return method, path, comment_lines
 
     method, path = case.target.split(" ", 1)
@@ -99,12 +113,41 @@ def _is_automationexercise(base_url: str | None) -> bool:
     return bool(base_url and "automationexercise.com" in base_url.lower())
 
 
+def _is_reqres(base_url: str | None) -> bool:
+    return bool(base_url and "reqres.in" in base_url.lower())
+
+
+def _reqres_placeholder_path(path: str) -> str:
+    return re.sub(
+        r"/api/collections/products/records/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\b",
+        "/api/collections/products/records/{record_id_filled_during_test}",
+        path,
+    )
+
+
+def _reqres_placeholder_url(url: str) -> str:
+    return re.sub(
+        r"/api/collections/products/records/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\b",
+        "/api/collections/products/records/{record_id_filled_during_test}",
+        url,
+    )
+
+
+def _reqres_placeholder_target(target: str) -> str:
+    return re.sub(
+        r"/api/collections/products/records/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\b",
+        "/api/collections/products/records/{record_id_filled_during_test}",
+        target,
+    )
+
+
 def _render_helper_module(
     *,
     include_ui_helpers: bool,
     include_automationexercise_helpers: bool,
+    include_reqres_helpers: bool,
 ) -> str:
-    if not include_ui_helpers and not include_automationexercise_helpers:
+    if not include_ui_helpers and not include_automationexercise_helpers and not include_reqres_helpers:
         return ""
 
     lines = [
@@ -121,6 +164,16 @@ def _render_helper_module(
                 "from uuid import uuid4",
                 "",
                 "from api_clients.automation_exercise_client import build_account_payload",
+                "",
+            ]
+        )
+    elif include_reqres_helpers:
+        lines.extend(
+            [
+                "import json",
+                "from pathlib import Path",
+                "from uuid import uuid4",
+                "from urllib.parse import parse_qsl, urlsplit",
                 "",
             ]
         )
@@ -312,6 +365,164 @@ def _render_helper_module(
             ]
         )
 
+    if include_reqres_helpers:
+        lines.extend(
+            [
+                "",
+                "def reqres_default_record_payload(test_name: str) -> dict[str, object]:",
+                "    return {",
+                '        "data": {',
+                '            "name": f"Generated {test_name}",',
+                '            "price": 59.99,',
+                '            "category": "Electronics",',
+                '            "in_stock": True,',
+                "        }",
+                "    }",
+                "",
+                "",
+                "def reqres_query_params(full_url: str | None) -> dict[str, str]:",
+                "    if not full_url:",
+                "        return {}",
+                "    parsed = urlsplit(full_url)",
+                "    return dict(parse_qsl(parsed.query, keep_blank_values=True))",
+                "",
+                "",
+                "def reqres_request_payload(",
+                "    request_body: str | None,",
+                "    *,",
+                "    expected_response_payload: str | None = None,",
+                "    test_name: str,",
+                ") -> dict[str, object]:",
+                "    if request_body:",
+                "        return json.loads(request_body)",
+                "    if expected_response_payload:",
+                "        try:",
+                "            expected = json.loads(expected_response_payload)",
+                "        except json.JSONDecodeError:",
+                "            expected = None",
+                "        if isinstance(expected, dict):",
+                '            data = expected.get("data")',
+                "            if isinstance(data, dict):",
+                '                nested = data.get("data")',
+                "                if isinstance(nested, dict):",
+                '                    return {"data": nested}',
+                "            elif isinstance(data, list):",
+                "                for item in data:",
+                "                    if not isinstance(item, dict):",
+                "                        continue",
+                '                    nested = item.get("data")',
+                "                    if isinstance(nested, dict):",
+                '                        return {"data": nested}',
+                "    return reqres_default_record_payload(test_name)",
+                "",
+                "",
+                "def reqres_expected_payload_fragment(expected_response_payload: str | None) -> str:",
+                "    if not expected_response_payload:",
+                '        return ""',
+                "    try:",
+                "        payload = json.loads(expected_response_payload)",
+                "    except json.JSONDecodeError:",
+                "        return expected_response_payload",
+                "    if isinstance(payload, dict):",
+                '        data = payload.get("data")',
+                "        if isinstance(data, dict):",
+                '            nested = data.get("data")',
+                "            if isinstance(nested, dict):",
+                "                return json.dumps(nested, sort_keys=True)",
+                "        elif isinstance(data, list):",
+                "            for item in data:",
+                "                if not isinstance(item, dict):",
+                "                    continue",
+                '                nested = item.get("data")',
+                "                if isinstance(nested, dict):",
+                "                    return json.dumps(nested, sort_keys=True)",
+                "    return json.dumps(payload, sort_keys=True)",
+                "",
+                "",
+                "def reqres_extract_record_id(payload: object) -> str | None:",
+                "    if isinstance(payload, dict):",
+                '        value = payload.get("id")',
+                "        if value is not None:",
+                "            return str(value)",
+                "        for nested in payload.values():",
+                "            extracted = reqres_extract_record_id(nested)",
+                "            if extracted is not None:",
+                "                return extracted",
+                "    elif isinstance(payload, list):",
+                "        for nested in payload:",
+                "            extracted = reqres_extract_record_id(nested)",
+                "            if extracted is not None:",
+                "                return extracted",
+                "    return None",
+                "",
+                "",
+                "async def reqres_request_kwargs(",
+                "    client,",
+                "    *,",
+                "    test_name: str,",
+                "    path: str,",
+                "    method: str,",
+                "    full_url: str | None,",
+                "    request_body: str | None,",
+                "    expected_response_payload: str | None,",
+                ") -> tuple[str, dict[str, object], dict[str, object] | None]:",
+                "    params = reqres_query_params(full_url)",
+                "    request_kwargs: dict[str, object] = {}",
+                "    if params:",
+                '        request_kwargs["params"] = params',
+                "    payload = reqres_request_payload(",
+                "        request_body,",
+                "        expected_response_payload=expected_response_payload,",
+                "        test_name=test_name,",
+                "    )",
+                "    cleanup: dict[str, object] | None = None",
+                "    resolved_path = path",
+                "",
+                '    if "/api/collections/products/records/" in path and method in {"GET", "PUT", "DELETE"}:',
+                "        # The documentation uses example record ids. For live tests, create",
+                "        # a disposable record first and replace the example id with the real one.",
+                "        create_response = await client.post(",
+                '            "/api/collections/products/records",',
+                "            params=params or None,",
+                "            json=payload,",
+                "        )",
+                "        assert create_response.status_code in {200, 201}",
+                "        record_id = reqres_extract_record_id(create_response.json())",
+                '        assert record_id, "ReqRes create record response did not include an id"',
+                '        resolved_path = f"/api/collections/products/records/{record_id}"',
+                '        cleanup = {"path": resolved_path, "params": params or None}',
+                '        if method == "PUT":',
+                '            request_kwargs["json"] = payload',
+                "        return resolved_path, request_kwargs, cleanup",
+                "",
+                '    if method in {"POST", "PUT", "PATCH"}:',
+                '        request_kwargs["json"] = payload',
+                '        if path == "/api/collections/products/records":',
+                '            cleanup = {"path": None, "params": None}',
+                "    return resolved_path, request_kwargs, cleanup",
+                "",
+                "",
+                "async def cleanup_reqres_record(client, cleanup: dict[str, object] | None) -> None:",
+                "    if not cleanup:",
+                "        return",
+                '    path = cleanup.get("path")',
+                "    if not path:",
+                "        return",
+                "    try:",
+                '        await client.delete(path, params=cleanup.get("params"))',
+                "    except Exception:",
+                "        return",
+                "",
+                "",
+                "def load_generated_case_data(module_file: str, file_name: str) -> dict[str, dict[str, str]]:",
+                "    data_path = Path(module_file).with_name(file_name)",
+                "    if not data_path.is_file():",
+                "        return {}",
+                "    return json.loads(data_path.read_text(encoding='utf-8'))",
+                "",
+            ]
+        )
+
     return "\n".join(lines)
 
 
@@ -323,9 +534,11 @@ def render_gap_tests(
     base_url_setting: str = "base_url",
     feature: str = "feature:generated-gap-coverage",
     helper_module_stem: str | None = None,
+    data_file_name: str | None = None,
 ) -> str:
     """Render a deterministic generated pytest module."""
     automationexercise = _is_automationexercise(base_url)
+    reqres = _is_reqres(base_url)
     include_ui_helpers = any(case.coverage_type == "ui" for case in cases)
     helper_imports: list[str] = []
     if include_ui_helpers:
@@ -342,6 +555,15 @@ def render_gap_tests(
             [
                 "automationexercise_request_kwargs",
                 "cleanup_generated_account",
+            ]
+        )
+    if reqres:
+        helper_imports.extend(
+            [
+                "cleanup_reqres_record",
+                "load_generated_case_data",
+                "reqres_expected_payload_fragment",
+                "reqres_request_kwargs",
             ]
         )
 
@@ -371,6 +593,22 @@ def render_gap_tests(
                 "",
             ]
         )
+    if data_file_name:
+        header_lines.extend(
+            [
+                f"CASE_DATA = load_generated_case_data(__file__, {data_file_name!r})",
+                "",
+            ]
+        )
+    if reqres:
+        header_lines.extend(
+            [
+                "from config.settings import get_settings",
+                "",
+                "_SETTINGS = get_settings()",
+                "",
+            ]
+        )
     header_lines.extend(
         [
             "from coverage_agent.decorators import covers",
@@ -381,15 +619,25 @@ def render_gap_tests(
             "pytestmark = [",
             "    pytest.mark.api,",
             "    pytest.mark.asyncio,",
-            "]",
         ]
     )
+    if reqres:
+        header_lines.extend(
+            [
+                "    pytest.mark.skipif(",
+                "        not _SETTINGS.run_live_tests or not _SETTINGS.reqres_api_key,",
+                '        reason="Set RUN_LIVE_TESTS=true and REQRES_API_KEY for ReqRes generated API coverage",',
+                "    ),",
+            ]
+        )
+    header_lines.append("]")
     header = "\n".join(header_lines)
 
     functions: list[str] = []
     for case in sorted(cases, key=lambda item: (item.coverage_type, item.target)):
         name = f"{case.coverage_type}_{_identifier(case.target)}"
-        target_literal = json.dumps(case.target)
+        rendered_target = _reqres_placeholder_target(case.target) if reqres else case.target
+        target_literal = json.dumps(rendered_target)
         decorator = (
             f'@covers(type="{case.coverage_type}", target={target_literal}, priority="high", '
             f'template="{case.template}", page={page!r}, feature={feature!r}, '
@@ -413,6 +661,11 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
         elif case.coverage_type == "api":
             method, path, comment_lines = _api_case_metadata(case)
             comment_block = "".join(f"    {line}\n" for line in comment_lines)
+            response_status_assertion = (
+                f"assert response.status_code == int({repr(str(case.api_details.get('response_code', '')).strip())})"
+                if case.api_details and str(case.api_details.get("response_code", "")).strip()
+                else "assert response.status_code != 500"
+            )
             expected_code = (
                 repr(str(case.api_details.get("response_code", "")).strip())
                 if case.api_details
@@ -423,11 +676,15 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
                 if case.api_details
                 else "''"
             )
+            has_expected_payload = bool(
+                case.api_details and str(case.api_details.get("response_payload", "")).strip()
+            )
             scenario_name = (
                 repr(str(case.api_details.get("name", "")).strip())
                 if case.api_details
                 else "''"
             )
+            case_data_ref = f"CASE_DATA.get({name!r}, {{}})"
             request_parameters = (
                 repr(str(case.api_details.get("request_parameters", "")).strip())
                 if case.api_details and case.api_details.get("request_parameters")
@@ -437,6 +694,22 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
                 repr(str(case.api_details.get("response_payload_kind", "message")).strip())
                 if case.api_details
                 else "'message'"
+            )
+            response_payload_kind_value = (
+                str(case.api_details.get("response_payload_kind", "message")).strip()
+                if case.api_details
+                else "message"
+            )
+            full_url = (
+                repr(str(case.api_details.get("full_url", "")).strip())
+                if case.api_details and case.api_details.get("full_url")
+                else "None"
+            )
+            rendered_path = _reqres_placeholder_path(path) if reqres else path
+            rendered_full_url = (
+                repr(_reqres_placeholder_url(str(case.api_details.get("full_url", "")).strip()))
+                if reqres and case.api_details and case.api_details.get("full_url")
+                else full_url
             )
             if automationexercise:
                 response_assertion = f'''response_payload = response.json()
@@ -466,21 +739,68 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
         finally:
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 '''
-            else:
-                response_assertion = f'''payload = response.json()
-    if {response_payload_kind} == "json":
+            elif reqres:
+                if response_payload_kind_value == "json":
+                    response_assertion = """payload = response.json() if response.content else None
         assert isinstance(payload, (dict, list))
-    elif {expected_message}:
         rendered_payload = json.dumps(payload, sort_keys=True)
-        assert {expected_message} in rendered_payload'''
-                body = f'''{comment_block}    url = f"{{DEFAULT_BASE_URL}}{path}"
+        assert expected_response_payload in rendered_payload""" if has_expected_payload else """payload = response.json() if response.content else None
+        assert isinstance(payload, (dict, list))"""
+                    reqres_case_locals = f"""    case_data = {case_data_ref}
+    raw_expected_response_payload = case_data.get("response_payload", "")
+    expected_response_payload = reqres_expected_payload_fragment(raw_expected_response_payload)
+    request_body = case_data.get("request_body")"""
+                elif response_payload_kind_value == "none":
+                    response_assertion = ""
+                    reqres_case_locals = f"""    case_data = {case_data_ref}
+    raw_expected_response_payload = None
+    request_body = case_data.get("request_body")"""
+                else:
+                    response_assertion = """payload = response.json() if response.content else None
+        rendered_payload = json.dumps(payload, sort_keys=True)
+        assert expected_response_payload in rendered_payload""" if has_expected_payload else """payload = response.json() if response.content else None"""
+                    reqres_case_locals = f"""    case_data = {case_data_ref}
+    raw_expected_response_payload = case_data.get("response_payload", "")
+    expected_response_payload = reqres_expected_payload_fragment(raw_expected_response_payload)
+    request_body = case_data.get("request_body")"""
+                body = f'''{comment_block}{reqres_case_locals}
+    resolved_path, request_kwargs, cleanup = await reqres_request_kwargs(
+        reqres_http_client,
+        test_name={name!r},
+        path={rendered_path!r},
+        method={method!r},
+        full_url={rendered_full_url},
+        request_body=request_body,
+        expected_response_payload=raw_expected_response_payload,
+    )
+    try:
+        response = await reqres_http_client.request("{method}", resolved_path, **request_kwargs)
+        {response_status_assertion}
+        {response_assertion}
+    finally:
+        await cleanup_reqres_record(reqres_http_client, cleanup)
+'''
+            else:
+                if response_payload_kind_value == "json":
+                    response_assertion = """payload = response.json()
+    assert isinstance(payload, (dict, list))
+    rendered_payload = json.dumps(payload, sort_keys=True)
+    assert expected_message in rendered_payload""" if has_expected_payload else """payload = response.json()
+    assert isinstance(payload, (dict, list))"""
+                elif response_payload_kind_value == "none":
+                    response_assertion = ""
+                else:
+                    response_assertion = f'''payload = response.json()
+    rendered_payload = json.dumps(payload, sort_keys=True)
+    assert {expected_message} in rendered_payload''' if has_expected_payload else "payload = response.json()"
+                body = f'''{comment_block}    url = f"{{DEFAULT_BASE_URL}}{rendered_path}"
     response = await api_client.request("{method}", url)
-    assert response.status_code == int({expected_code}) if {expected_code} else response.status_code != 500
+    {response_status_assertion}
     {response_assertion}
 '''
             functions.append(
                 f'''\n\n{decorator}
-async def test_generated_{name}({"settings, test_diagnostics" if automationexercise else "api_client"}):
+async def test_generated_{name}({"settings, test_diagnostics" if automationexercise else "settings, reqres_http_client" if reqres else "api_client"}):
 {body}
 '''
             )
@@ -508,10 +828,24 @@ def scaffold_gap_tests(
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     helper_filename = _helper_module_name(destination)
+    data_filename = _data_file_name(destination)
     helper_stem = Path(helper_filename).stem
+    data_payload: dict[str, dict[str, str]] = {}
+    for case in cases:
+        if case.coverage_type != "api" or not case.api_details:
+            continue
+        data_entry: dict[str, str] = {}
+        for key in ("request_body", "response_payload"):
+            value = case.api_details.get(key)
+            if value:
+                data_entry[key] = str(value)
+        if data_entry:
+            name = f"{case.coverage_type}_{_identifier(case.target)}"
+            data_payload[name] = data_entry
     helper_source = _render_helper_module(
         include_ui_helpers=any(case.coverage_type == "ui" for case in cases),
         include_automationexercise_helpers=_is_automationexercise(base_url),
+        include_reqres_helpers=_is_reqres(base_url),
     )
 
     destination.write_text(
@@ -522,12 +856,18 @@ def scaffold_gap_tests(
             base_url_setting=base_url_setting,
             feature=feature,
             helper_module_stem=helper_stem if helper_source else None,
+            data_file_name=data_filename if data_payload and helper_source else None,
         ),
         encoding="utf-8",
     )
     if helper_source:
         (destination.parent / helper_filename).write_text(
             helper_source,
+            encoding="utf-8",
+        )
+    if data_payload:
+        (destination.parent / data_filename).write_text(
+            json.dumps(data_payload, indent=2) + "\n",
             encoding="utf-8",
         )
     return len(cases)

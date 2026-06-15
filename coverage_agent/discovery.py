@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import Page, Request, TimeoutError as PlaywrightTimeoutError, async_playwright
 from playwright_stealth import Stealth
 
-from config.settings import get_settings
+from config.settings import ROOT, get_settings
 from .plugins import get_scraper
 
 
@@ -22,6 +22,7 @@ SECURITY_CHALLENGE_SELECTORS = (
     "#challenge-running",
     "iframe[src*='challenges']",
 )
+DOCUMENTATION_SOURCES_ROOT = ROOT / "coverage_agent" / "plugins" / "documentation_sources"
 
 
 class PlaywrightDiscoveryEngine:
@@ -112,6 +113,20 @@ class PlaywrightDiscoveryEngine:
         if any(token in url.lower() for token in IGNORED_NETWORK_TOKENS):
             return None
         return {"method": method.upper(), "path": parsed.path}
+
+    def documentation_source_path(self, file_name: str) -> Path:
+        """Resolve a documentation source file inside the plugin source directory."""
+        root = DOCUMENTATION_SOURCES_ROOT.resolve()
+        candidate = (root / file_name).resolve()
+        if root not in candidate.parents and candidate != root:
+            raise ValueError("Documentation source must be inside coverage_agent/plugins/documentation_sources")
+        if not candidate.is_file():
+            raise FileNotFoundError(f"Documentation source not found: {candidate.name}")
+        return candidate
+
+    def documentation_source_page(self, file_name: str) -> str:
+        """Build a stable manifest page identifier for documentation-backed discovery."""
+        return f"/documentation_sources/{Path(file_name).name}"
 
     async def harvest_ui_elements(self, page: Page) -> set[str]:
         """Collect all currently attached stable target attributes."""
@@ -246,6 +261,19 @@ class PlaywrightDiscoveryEngine:
                 await context.close()
                 await browser.close()
         return self.application_manifest(target_path)
+
+    async def scrape_documentation_file(self, file_name: str) -> dict[str, object]:
+        """Parse a documentation snapshot from coverage_agent/plugins/documentation_sources."""
+        if self.scraper is None:
+            raise ValueError(f"No documentation scraper registered for {self.base_url}")
+        source_path = self.documentation_source_path(file_name)
+        content = source_path.read_text(encoding="utf-8")
+        self.discovered_api_endpoints = await self.scraper.scrape_content(content)
+        self.discovered_ui_elements.clear()
+        self.ui_element_presence = {}
+        self.security_challenge_status = "not_detected"
+        self.security_challenge_selector = None
+        return self.application_manifest(self.documentation_source_page(source_path.name))
 
     def application_manifest(self, page: str) -> dict[str, object]:
         """Build a deterministic application map."""

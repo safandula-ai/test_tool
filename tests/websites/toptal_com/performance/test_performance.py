@@ -9,7 +9,7 @@ import pytest
 from playwright.async_api import expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
+from tests.websites.helpers import resolve_target_url
 from tests.websites.toptal_com.suite_config import (
     BASE_URL,
     PERF_HOME_PATH,
@@ -20,18 +20,17 @@ from tests.websites.toptal_com.suite_config import (
 )
 from utils.test_diagnostics import httpx_event_hooks
 
+pytestmark = pytest.mark.usefixtures("require_live_target_enabled")
+
 
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_target_response_time(
     target_url,
-    live_target_enabled,
     settings,
     test_diagnostics,
 ):
-    if not live_target_enabled:
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
     maximum_ms = float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))
     started = time.perf_counter()
     async with httpx.AsyncClient(
@@ -62,7 +61,6 @@ async def test_homepage_navigation_performance_metrics(
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
         settings,
@@ -118,7 +116,6 @@ async def test_route_renders_under_mobile_throttling(
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
         settings,

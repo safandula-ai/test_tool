@@ -66,6 +66,13 @@ def live_target_enabled(pytestconfig: pytest.Config, settings: Settings) -> bool
     return settings.run_live_tests or bool(pytestconfig.getoption("--target-url"))
 
 
+@pytest.fixture
+def require_live_target_enabled(live_target_enabled: bool) -> None:
+    """Skip tests that require a live target unless one is explicitly enabled."""
+    if not live_target_enabled:
+        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+
+
 @pytest.fixture(autouse=True)
 def test_diagnostics(request: pytest.FixtureRequest) -> Iterator[TestDiagnosticRecorder]:
     """Create a recorder for every test, including unit and skipped tests."""

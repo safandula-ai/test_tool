@@ -1,6 +1,7 @@
 """Website-specific suite configuration."""
 
 BASE_URL = "https://reqres.in"
+REQRES_ENV_HEADER = "prod"
 SETTINGS_BASE_URL_ATTR = None
 SUITE_NAME = "reqres_in"
 SMOKE_HEALTH_PATH = "/"

@@ -317,6 +317,14 @@ python -m coverage_agent analyze --tests tests --output reports/coverage_map.jso
 python -m coverage_agent discover --base-url https://automationexercise.com --path /login
 ```
 
+For documentation-backed APIs, use `--file` instead of `--path`. The file name
+is resolved under `coverage_agent/plugins/documentation_sources/` and parsed by
+the plugin selected from `--base-url`:
+
+```bash
+python -m coverage_agent discover --base-url https://reqres.in --file reqres_in.html
+```
+
 When `--base-url` is omitted, discovery uses `BASE_URL` from `.env`. Discovery
 creates or reuses `tests/websites/<hostname>/` with `suite_config.py` and the
 standard `api/`, `ui/`, `smoke/`, `performance/`, `security/`, and `generated/`
@@ -346,6 +354,12 @@ The `coverage_agent` uses a plugin-based architecture for API discovery. Website
 
 The `automationexercise.com` plugin, for example, is designed to parse the API documentation on the `/api_list` page, including scenario titles, request parameters, response codes, and response messages. Distinct scenarios for the same method and path, such as valid and invalid `POST /api/verifyLogin` flows, are preserved as separate discovered API entries.
 
+The `reqres.in` plugin supports both live page discovery and documentation-file
+discovery from `coverage_agent/plugins/documentation_sources/reqres_in.html`.
+Its parser extracts endpoint cards from the documentation markup, including
+request bodies, explicit response status codes, response JSON payloads, and
+curl samples when present.
+
 3. Compare discovered targets with decorated tests:
 
 ```bash
@@ -370,7 +384,16 @@ Generated API tests keep the discovered scenario title and request parameters as
 comments, which is useful when one endpoint has multiple documented behaviors.
 The generated test module now keeps only imports, constants, decorators, and
 test functions. Helper logic is written into a sibling module such as
-`_test_generated_coverage_gaps_helpers.py`.
+`_test_generated_coverage_gaps_helpers.py`. Large request and response payload
+snapshots are written into a sibling JSON data file such as
+`_test_generated_coverage_gaps_data.json` instead of being inlined into the
+Python test module.
+
+For ReqRes record-by-id cases, generated decorators and request metadata use a
+placeholder such as `{record_id_filled_during_test}` instead of the example id
+from the documentation. The live test creates a disposable record first and
+replaces that placeholder with the real id before issuing the documented
+`GET`, `PUT`, or `DELETE` request.
 
 5. Review and execute the generated tests against the live target:
 
@@ -628,6 +651,8 @@ coverage_agent/
     __init__.py
     base.py
     automationexercise.py
+    reqres.py
+    documentation_sources/   Static documentation snapshots for file-backed discovery
   suite_layout.py            Website package and smoke/performance/security scaffolding
   template_engine.py         Dynamic suite assembly and test selection
   __main__.py                coverage_agent command-line entry point

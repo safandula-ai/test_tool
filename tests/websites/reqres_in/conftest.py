@@ -6,7 +6,7 @@ import httpx
 import pytest_asyncio
 
 from config.settings import Settings
-from tests.websites.reqres_in.suite_config import BASE_URL
+from tests.websites.reqres_in.suite_config import BASE_URL, REQRES_ENV_HEADER
 from utils.test_diagnostics import TestDiagnosticRecorder, httpx_event_hooks
 
 
@@ -15,7 +15,9 @@ async def reqres_http_client(
     settings: Settings,
     test_diagnostics: TestDiagnosticRecorder,
 ) -> AsyncIterator[httpx.AsyncClient]:
-    headers = {"x-api-key": settings.reqres_api_key} if settings.reqres_api_key else {}
+    headers: dict[str, str] = {"X-Reqres-Env": REQRES_ENV_HEADER}
+    if settings.reqres_api_key:
+        headers["x-api-key"] = settings.reqres_api_key
     async with httpx.AsyncClient(
         base_url=BASE_URL,
         headers=headers,

@@ -34,12 +34,18 @@ def _require_live_target(pytestconfig, settings):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
 
 
+@pytest.fixture
+def require_live_target_enabled(pytestconfig, settings):
+    _require_live_target(pytestconfig, settings)
+
+
+pytestmark = pytest.mark.usefixtures("require_live_target_enabled")
+
+
 @pytest.mark.performance
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_target_response_time(target_url, live_target_enabled, settings, test_diagnostics):
-    if not live_target_enabled:
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+async def test_target_response_time(target_url, settings, test_diagnostics):
     maximum_ms = float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))
     started = time.perf_counter()
     async with httpx.AsyncClient(
@@ -70,7 +76,6 @@ async def test_homepage_navigation_performance_metrics(
     settings,
     test_diagnostics,
 ):
-    _require_live_target(pytestconfig, settings)
     base_url = _target_url(pytestconfig)
     max_ttfb_ms = float(os.getenv("PERFORMANCE_MAX_TTFB_MS", "800"))
     max_load_ms = float(os.getenv("PERFORMANCE_MAX_LOAD_MS", "3000"))
@@ -127,7 +132,6 @@ async def test_route_renders_under_mobile_throttling(
     settings,
     test_diagnostics,
 ):
-    _require_live_target(pytestconfig, settings)
     base_url = _target_url(pytestconfig)
     max_interactive_ms = float(os.getenv("PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS", "10000"))
 

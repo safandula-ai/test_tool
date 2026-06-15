@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from pathlib import Path
 
 import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -16,8 +17,11 @@ from coverage_agent.gap_scaffolder import scaffold_gap_tests
 from coverage_agent.manifests import load_manifests
 from coverage_agent.suite_layout import ensure_website_suite, website_slug
 from coverage_agent.template_engine import DynamicSuiteAssembler
-from coverage_agent.__main__ import main
+from coverage_agent.__main__ import build_parser, main
 from coverage_agent.plugins.automationexercise import AutomationExerciseScraper
+from coverage_agent.plugins.reqres import ReqResScraper, parse_reqres_markup
+from coverage_agent.plugins import get_scraper
+from config.settings import ROOT
 
 
 @covers(type="api", target="coverage-agent://decorators", priority="high", template="APIContractTemplate")
@@ -92,9 +96,10 @@ def test_analyzer_rejects_missing_required_fields(tmp_path):
 def test_discovery_normalizes_and_filters_api_requests():
     engine = PlaywrightDiscoveryEngine("https://example.test")
 
-    assert engine.endpoint_signature("post", "https://example.test/api/orders?draft=1") == (
-        "POST /api/orders"
-    )
+    assert engine.endpoint_signature("post", "https://example.test/api/orders?draft=1") == {
+        "method": "POST",
+        "path": "/api/orders",
+    }
     assert engine.endpoint_signature("GET", "https://other.test/api/orders") is None
     assert engine.endpoint_signature("GET", "https://example.test/api/analytics/events") is None
 
@@ -499,6 +504,106 @@ def test_gap_scaffolder_generates_automationexercise_payload_and_assertions(tmp_
     compile(helper_source, str(helper), "exec")
 
 
+@covers(type="api", target="coverage-agent://gap-scaffolder/reqres", priority="high", template="APIContractTemplate")
+def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
+    report = tmp_path / "gap_report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "page": "/documentation_sources/reqres_in.html",
+                "base_url": "https://reqres.in",
+                "untested_ui_elements": [],
+                "untested_api_endpoints": [
+                    {
+                        "method": "POST",
+                        "path": "/api/collections/products/records",
+                        "full_url": "https://reqres.in/api/collections/products/records?project_id=29539",
+                        "response_code": "201",
+                        "name": "Add a new record to Products",
+                        "request_parameters": "project_id, data",
+                        "request_body": (
+                            '{\n'
+                            '  "data": {\n'
+                            '    "name": "Wireless Headphones"\n'
+                            "  }\n"
+                            "}"
+                        ),
+                        "response_payload": '{"data":{"id":"example"}}',
+                        "response_payload_kind": "json",
+                        "target": "POST /api/collections/products/records :: Add a new record to Products | status 201",
+                    },
+                    {
+                        "method": "GET",
+                        "path": "/api/collections/products/records/4bec354b-b22b-4824-b091-3c9821837c9e",
+                        "full_url": "https://reqres.in/api/collections/products/records/4bec354b-b22b-4824-b091-3c9821837c9e?project_id=29539",
+                        "response_code": "200",
+                        "name": "Fetch a single record by ID",
+                        "request_parameters": "project_id",
+                        "response_payload": '{"data":{"id":"4bec354b-b22b-4824-b091-3c9821837c9e","data":{"name":"Wireless Headphones"}}}',
+                        "response_payload_kind": "json",
+                        "target": "GET /api/collections/products/records/4bec354b-b22b-4824-b091-3c9821837c9e :: Fetch a single record by ID | status 200",
+                    }
+                ],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "test_generated.py"
+
+    scaffold_gap_tests(report, output)
+    source = output.read_text(encoding="utf-8")
+    helper = tmp_path / "_test_generated_helpers.py"
+    helper_source = helper.read_text(encoding="utf-8")
+    data_file = tmp_path / "_test_generated_data.json"
+    data_payload = json.loads(data_file.read_text(encoding="utf-8"))
+
+    assert "reqres_http_client" in source
+    assert "from config.settings import get_settings" in source
+    assert "_SETTINGS = get_settings()" in source
+    assert "pytest.mark.skipif(" in source
+    assert 'reason="Set RUN_LIVE_TESTS=true and REQRES_API_KEY for ReqRes generated API coverage"' in source
+    assert "CASE_DATA = load_generated_case_data(__file__, '_test_generated_data.json')" in source
+    assert "case_data = CASE_DATA.get(" in source
+    assert "raw_expected_response_payload = case_data.get(\"response_payload\", \"\")" in source
+    assert "expected_response_payload = reqres_expected_payload_fragment(raw_expected_response_payload)" in source
+    assert "resolved_path, request_kwargs, cleanup = await reqres_request_kwargs(" in source
+    assert "full_url='https://reqres.in/api/collections/products/records?project_id=29539'" in source
+    assert "path='/api/collections/products/records/{record_id_filled_during_test}'" in source
+    assert (
+        "full_url='https://reqres.in/api/collections/products/records/{record_id_filled_during_test}?project_id=29539'"
+        in source
+    )
+    assert (
+        'target="GET /api/collections/products/records/{record_id_filled_during_test} :: Fetch a single record by ID | status 200"'
+        in source
+    )
+    assert 'response = await reqres_http_client.request("POST", resolved_path, **request_kwargs)' in source
+    assert "assert response.status_code == int('201')" in source
+    assert "if 'json' == \"json\":" not in source
+    assert "if 'none' == \"json\":" not in source
+    assert "if expected_response_payload:" not in source
+    assert "assert expected_response_payload in rendered_payload" in source
+    assert "rendered_payload = json.dumps(payload, sort_keys=True)" in source
+    assert (
+        "async def test_generated_api_post_api_collections_products_records_add_a_new_record_to_products_status_201"
+        in source
+    )
+    assert '"data": {' not in source
+    assert 'pytest.skip("Set RUN_LIVE_TESTS=true and REQRES_API_KEY for ReqRes generated API coverage")' not in source
+    assert "async def reqres_request_kwargs(" in helper_source
+    assert "async def cleanup_reqres_record(" in helper_source
+    assert "def load_generated_case_data(" in helper_source
+    assert "def reqres_expected_payload_fragment(" in helper_source
+    assert '"/api/collections/products/records/" in path' in helper_source
+    assert data_payload["api_post_api_collections_products_records_add_a_new_record_to_products_status_201"] == {
+        "request_body": '{\n  "data": {\n    "name": "Wireless Headphones"\n  }\n}',
+        "response_payload": '{"data":{"id":"example"}}',
+    }
+    compile(source, str(output), "exec")
+    compile(helper_source, str(helper), "exec")
+
+
 @covers(type="api", target="coverage-agent://automationexercise-scraper", priority="high", template="APIContractTemplate")
 def test_automationexercise_scraper_captures_request_parameters_and_titles():
     class Page:
@@ -559,6 +664,116 @@ def test_automationexercise_scraper_marks_response_json_payloads():
     ]
 
 
+@covers(type="api", target="coverage-agent://reqres-scraper", priority="high", template="APIContractTemplate")
+def test_reqres_scraper_parses_endpoint_cards_from_documentation_source():
+    source = (
+        ROOT / "coverage_agent" / "plugins" / "documentation_sources" / "reqres_in.html"
+    ).read_text(encoding="utf-8")
+
+    endpoints = parse_reqres_markup(source)
+
+    assert len(endpoints) == 5
+    by_name = {endpoint["name"]: endpoint for endpoint in endpoints}
+
+    fetch_all = by_name["Fetch all records from Products"]
+    assert fetch_all["method"] == "GET"
+    assert fetch_all["path"] == "/api/collections/products/records"
+    assert fetch_all["response_code"] == "200"
+    assert fetch_all["response_payload_kind"] == "json"
+    assert '"data": [' in fetch_all["response_payload"]
+
+    fetch_one = by_name["Fetch a single record by ID"]
+    assert fetch_one["method"] == "GET"
+    assert fetch_one["path"].startswith("/api/collections/products/records/")
+    assert fetch_one["response_code"] == "200"
+    assert fetch_one["response_payload_kind"] == "json"
+    assert '"collection_id":' in fetch_one["response_payload"]
+
+    create_record = by_name["Add a new record to Products"]
+    assert create_record["method"] == "POST"
+    assert create_record["response_code"] == "201"
+    assert create_record["request_parameters"] == "project_id, data"
+    assert create_record["request_body"].startswith("{")
+    assert create_record["response_payload_kind"] == "json"
+    assert '"project_id": 29539' in create_record["response_payload"]
+    assert "x-api-key: ${REQRES_API_KEY}" in create_record["curl"]
+
+    update_record = by_name["Update an existing record"]
+    assert update_record["method"] == "PUT"
+    assert update_record["path"].startswith("/api/collections/products/records/")
+    assert update_record["response_code"] == "200"
+    assert update_record["request_parameters"] == "project_id, data"
+    assert update_record["response_payload_kind"] == "json"
+
+    delete_record = by_name["Soft-delete a record"]
+    assert delete_record["method"] == "DELETE"
+    assert delete_record["path"].startswith("/api/collections/products/records/")
+    assert delete_record["response_code"] == "204"
+    assert delete_record["response_payload_kind"] == "none"
+    assert "response_payload" not in delete_record
+
+
+@covers(type="api", target="coverage-agent://reqres-scraper/page", priority="high", template="APIContractTemplate")
+def test_reqres_scraper_reads_page_content_and_plugin_registry_selects_it():
+    class Page:
+        async def content(self):
+            return (
+                ROOT / "coverage_agent" / "plugins" / "documentation_sources" / "reqres_in.html"
+            ).read_text(encoding="utf-8")
+
+    endpoints = asyncio.run(ReqResScraper().scrape(Page()))
+
+    assert len(endpoints) == 5
+    assert {endpoint["response_code"] for endpoint in endpoints} == {"200", "201", "204"}
+    assert any(endpoint.get("request_body", "").startswith("{") for endpoint in endpoints)
+    assert any(endpoint.get("response_payload_kind") == "json" for endpoint in endpoints)
+    assert any(endpoint.get("response_payload_kind") == "none" for endpoint in endpoints)
+    assert isinstance(get_scraper("https://reqres.in"), ReqResScraper)
+
+
+@covers(type="api", target="coverage-agent://discover/file-args", priority="high", template="APIContractTemplate")
+def test_discover_parser_accepts_file_instead_of_path():
+    args = build_parser().parse_args(
+        [
+            "discover",
+            "--base-url",
+            "https://reqres.in",
+            "--file",
+            "reqres_in.html",
+        ]
+    )
+
+    assert args.command == "discover"
+    assert args.file == "reqres_in.html"
+    assert args.path is None
+
+
+@covers(type="api", target="coverage-agent://reqres-scraper/file-discovery", priority="high", template="APIContractTemplate")
+def test_discovery_engine_can_build_manifest_from_documentation_file():
+    engine = PlaywrightDiscoveryEngine("https://reqres.in")
+
+    manifest = asyncio.run(engine.scrape_documentation_file("reqres_in.html"))
+
+    assert manifest["page"] == "/documentation_sources/reqres_in.html"
+    assert manifest["scan_status"] == "complete"
+    assert manifest["discovered_ui_elements"] == []
+    assert len(manifest["discovered_api_endpoints"]) == 5
+    assert manifest["discovered_api_endpoints"][0]["full_url"].startswith("https://reqres.in/api/")
+    assert {endpoint["response_code"] for endpoint in manifest["discovered_api_endpoints"]} == {
+        "200",
+        "201",
+        "204",
+    }
+    assert any(
+        endpoint.get("request_body", "").startswith("{")
+        for endpoint in manifest["discovered_api_endpoints"]
+    )
+    assert any(
+        endpoint.get("response_payload_kind") == "json"
+        for endpoint in manifest["discovered_api_endpoints"]
+    )
+
+
 @covers(type="api", target="coverage-agent://gap-scaffolder/response-json", priority="high", template="APIContractTemplate")
 def test_gap_scaffolder_generates_json_response_assertion(tmp_path):
     report = tmp_path / "gap_report.json"
@@ -588,8 +803,46 @@ def test_gap_scaffolder_generates_json_response_assertion(tmp_path):
     scaffold_gap_tests(report, output)
     source = output.read_text(encoding="utf-8")
 
-    assert 'if \'json\' == "json":' in source
+    assert 'if \'json\' == "json":' not in source
     assert "assert isinstance(payload, (dict, list))" in source
+    assert "if expected_message:" not in source
+    assert "assert expected_message in rendered_payload" in source
+    assert "rendered_payload = json.dumps(payload, sort_keys=True)" in source
+    compile(source, str(output), "exec")
+
+
+@covers(type="api", target="coverage-agent://gap-scaffolder/response-none", priority="high", template="APIContractTemplate")
+def test_gap_scaffolder_omits_unused_expected_payload_for_empty_responses(tmp_path):
+    report = tmp_path / "gap_report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "page": "/documentation_sources/reqres_in.html",
+                "base_url": "https://reqres.in",
+                "untested_ui_elements": [],
+                "untested_api_endpoints": [
+                    {
+                        "method": "DELETE",
+                        "path": "/api/example/123",
+                        "full_url": "https://reqres.in/api/example/123?project_id=29539",
+                        "response_code": "204",
+                        "response_payload_kind": "none",
+                        "target": "DELETE /api/example/123 :: No Body",
+                    }
+                ],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "test_generated.py"
+
+    scaffold_gap_tests(report, output)
+    source = output.read_text(encoding="utf-8")
+
+    assert 'expected_response_payload = case_data.get("response_payload", "")' not in source
+    assert 'request_body = case_data.get("request_body")' in source
+    assert "assert response.status_code == int('204')" in source
     compile(source, str(output), "exec")
 
 

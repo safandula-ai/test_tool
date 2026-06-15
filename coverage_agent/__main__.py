@@ -27,7 +27,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     discover = commands.add_parser("discover", help="Generate application_map.json")
     discover.add_argument("--base-url", default=get_settings().base_url)
-    discover.add_argument("--path", default="/")
+    discover_target = discover.add_mutually_exclusive_group()
+    discover_target.add_argument("--path")
+    discover_target.add_argument("--file")
     discover.add_argument("--output", default="reports/application_map.json")
     discover.add_argument("--auth-state")
     discover.add_argument("--save-state")
@@ -71,18 +73,24 @@ async def _discover(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError("Provide --base-url or set BASE_URL")
     suite = ensure_website_suite(args.base_url)
     engine = PlaywrightDiscoveryEngine(args.base_url)
-    manifest = await engine.scrape_page(
-        args.path,
-        auth_state_path=args.auth_state,
-        save_state_path=args.save_state,
-        headless=not args.headed,
-        scan_distance=args.scan_distance,
-        step_delay_ms=args.step_delay_ms,
-        sniff_interval_ms=args.sniff_interval_ms,
-        max_scan_steps=args.max_scan_steps,
-        challenge_timeout_ms=args.challenge_timeout_ms,
-    )
-    engine.write_application_manifest(args.path, args.output)
+    if args.file:
+        manifest = await engine.scrape_documentation_file(args.file)
+        manifest_page = engine.documentation_source_page(args.file)
+    else:
+        target_path = args.path or "/"
+        manifest = await engine.scrape_page(
+            target_path,
+            auth_state_path=args.auth_state,
+            save_state_path=args.save_state,
+            headless=not args.headed,
+            scan_distance=args.scan_distance,
+            step_delay_ms=args.step_delay_ms,
+            sniff_interval_ms=args.sniff_interval_ms,
+            max_scan_steps=args.max_scan_steps,
+            challenge_timeout_ms=args.challenge_timeout_ms,
+        )
+        manifest_page = target_path
+    engine.write_application_manifest(manifest_page, args.output)
     print(f"Website suite: {suite.root}")
     return manifest
 
