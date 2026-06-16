@@ -12,8 +12,22 @@ from pages.sync_login_page import SyncLoginPage
 
 @pytest.mark.bdd
 @scenario("features/login.feature", "successful login")
-@covers(type="ui", target="login-submit", priority="high", template="InteractionTemplate", page="/login", feature="feature:authentication")
-@covers(type="ui", target="login-banner", priority="high", template="ComponentVisibilityTemplate", page="/login", feature="feature:authentication")
+@covers(
+    type="ui",
+    target="login-submit",
+    priority="high",
+    template="InteractionTemplate",
+    page="/login",
+    feature="feature:authentication",
+)
+@covers(
+    type="ui",
+    target="login-banner",
+    priority="high",
+    template="ComponentVisibilityTemplate",
+    page="/login",
+    feature="feature:authentication",
+)
 def test_successful_login():
     """Bind the readable login scenario to a pytest test."""
     pass

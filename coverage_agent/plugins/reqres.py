@@ -64,7 +64,7 @@ def _response_payload_from_segment(segment: str) -> tuple[str | None, str | None
     if not status_match:
         return None, None
 
-    response_fragment = segment[status_match.end() :]
+    response_fragment = segment[status_match.end():]
     if "No response body" in response_fragment:
         return None, "none"
 

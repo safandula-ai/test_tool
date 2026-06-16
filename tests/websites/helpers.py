@@ -7,19 +7,13 @@ import pytest
 
 def resolve_target_url(
     pytestconfig,
-    settings,
     *,
     default_base_url: str,
-    settings_base_url_attr: str | None = None,
 ) -> str:
     """Resolve the live target URL, preferring terminal overrides."""
     override = pytestconfig.getoption("--target-url")
     if override:
         return override.rstrip("/")
-    if settings_base_url_attr:
-        configured = getattr(settings, settings_base_url_attr, None)
-        if configured:
-            return str(configured).rstrip("/")
     return default_base_url.rstrip("/")
 
 

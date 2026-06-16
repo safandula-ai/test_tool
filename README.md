@@ -54,7 +54,6 @@ The framework reads configuration from environment variables and `.env` files.
 - `TRACE_ON_FAILURE`: enable trace capture for failed UI tests
 - `REQRES_API_KEY`: required by ReqRes for live API requests
 - `RUN_LIVE_TESTS`: opt in to tests that call external services
-- `AUTOMATION_EXERCISE_BASE_URL`: UI and API base URL for advanced tests
 - `UPDATE_VISUAL_BASELINES`: create or replace visual regression baselines
 - `ONE_SHOT_SMOKE_*`, `ONE_SHOT_PERF_*`, `ONE_SHOT_SECURITY_*`: optional path and selector overrides for the reusable one-shot templates
 - `API_DOC_URL_KEYWORDS`: API doc labels treated as endpoint URLs
@@ -70,6 +69,23 @@ Run all tests:
 ```bash
 pytest
 ```
+
+## Style Checks
+
+The repository includes a checked-in style configuration in `setup.cfg` for
+`pycodestyle` and `flake8`.
+
+Run the baseline repo style check with:
+
+```bash
+python -m flake8 .
+```
+
+Current policy:
+
+- uses `max-line-length = 120`
+- excludes virtualenv, cache, Allure, and report directories
+- excludes generated website coverage tests from the baseline style pass
 
 ## Allure Reporting
 
@@ -479,13 +495,12 @@ tests/websites/
 
 Every website package has `suite_config.py` and consistent `api/`, `ui/`,
 `smoke/`, `performance/`, `security/`, and `generated/` directories. Per-site
-paths, selectors, and base-URL resolution hints live in `suite_config.py`.
+paths, selectors, and base URLs live in `suite_config.py`.
 Shared runtime helpers such as target resolution, live-target gating, and
 consent dismissal live in `tests/websites/helpers.py`.
 
 Generic website tests use `--target-url` first. If it is omitted, each suite
-falls back to the configured base URL from `suite_config.py`, and may optionally
-map to a settings attribute such as `AUTOMATION_EXERCISE_BASE_URL`.
+falls back to the configured base URL from `suite_config.py`.
 
 Override the target directly from the terminal:
 

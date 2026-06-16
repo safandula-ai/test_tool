@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import autopep8
+import textwrap
+
 
 SUPPORTED_UI_TEMPLATES = {
     "ComponentVisibilityTemplate",
@@ -44,6 +47,45 @@ def _helper_module_name(output_path: str | Path) -> str:
 def _data_file_name(output_path: str | Path) -> str:
     destination = Path(output_path)
     return f"_{destination.stem}_data.json"
+
+
+def _format_generated_python(source: str) -> str:
+    formatted = autopep8.fix_code(
+        source,
+        options={"max_line_length": 120, "aggressive": 2},
+    )
+    return formatted.rstrip() + "\n"
+
+
+def _wrapped_string_literal(
+    value: str,
+    *,
+    indent: str = "        ",
+    width: int = 88,
+) -> str:
+    literal = repr(value)
+    if len(indent) + len(literal) <= width:
+        return literal
+
+    chunk_size = max(20, width - len(indent) - 4)
+    chunks = [
+        repr(value[index:index + chunk_size])
+        for index in range(0, len(value), chunk_size)
+    ]
+    joined = "\n".join(f"{indent}{chunk}" for chunk in chunks)
+    return f"(\n{joined}\n{indent[:-4]})"
+
+
+def _comment_lines(label: str, value: str, *, width: int = 88) -> list[str]:
+    prefix = f"# {label}: "
+    return textwrap.wrap(
+        value,
+        width=width,
+        initial_indent=prefix,
+        subsequent_indent="#   ",
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
 
 
 def load_gap_cases(report_path: str | Path) -> tuple[str, str | None, list[GapCase]]:
@@ -86,10 +128,15 @@ def _api_case_metadata(case: GapCase) -> tuple[str, str, list[str]]:
         path = str(case.api_details.get("path", ""))
         comment_lines = []
         if case.api_details.get("name"):
-            comment_lines.append(f"# Scenario: {case.api_details['name']}")
+            comment_lines.extend(
+                _comment_lines("Scenario", str(case.api_details["name"]))
+            )
         if case.api_details.get("request_parameters"):
-            comment_lines.append(
-                f"# Request Parameters: {case.api_details['request_parameters']}"
+            comment_lines.extend(
+                _comment_lines(
+                    "Request Parameters",
+                    str(case.api_details["request_parameters"]),
+                )
             )
         if case.api_details.get("response_code"):
             comment_lines.append(
@@ -98,8 +145,11 @@ def _api_case_metadata(case: GapCase) -> tuple[str, str, list[str]]:
         response_payload = str(case.api_details.get("response_payload", "")).strip()
         if response_payload:
             if len(response_payload) <= 120 and "\n" not in response_payload:
-                comment_lines.append(
-                    f"# Expected Response Message: {case.api_details['response_payload']}"
+                comment_lines.extend(
+                    _comment_lines(
+                        "Expected Response Message",
+                        str(case.api_details["response_payload"]),
+                    )
                 )
             else:
                 comment_lines.append("# Expected Response Payload: see generated case data")
@@ -115,6 +165,30 @@ def _is_automationexercise(base_url: str | None) -> bool:
 
 def _is_reqres(base_url: str | None) -> bool:
     return bool(base_url and "reqres.in" in base_url.lower())
+
+
+def _render_covers_decorator(
+    *,
+    coverage_type: str,
+    target: str,
+    template: str,
+    page: str,
+    feature: str,
+    presence: str,
+) -> str:
+    return "\n".join(
+        [
+            "@covers(",
+            f'    type="{coverage_type}",',
+            f"    target={_wrapped_string_literal(target, indent=' ' * 12)},",
+            '    priority="high",',
+            f'    template="{template}",',
+            f"    page={page!r},",
+            f"    feature={feature!r},",
+            f'    presence="{presence}",',
+            ")",
+        ]
+    )
 
 
 def _reqres_placeholder_path(path: str) -> str:
@@ -172,7 +246,6 @@ def _render_helper_module(
             [
                 "import json",
                 "from pathlib import Path",
-                "from uuid import uuid4",
                 "from urllib.parse import parse_qsl, urlsplit",
                 "",
             ]
@@ -219,151 +292,150 @@ def _render_helper_module(
         )
 
     if include_automationexercise_helpers:
-        lines.extend(
-            [
-                "",
-                "def default_request_payload(request_parameters: str | None) -> dict[str, str]:",
-                "    payload: dict[str, str] = {}",
-                "    if not request_parameters:",
-                "        return payload",
-                '    for raw_parameter in request_parameters.split(","):',
-                "        parameter = raw_parameter.strip()",
-                "        if not parameter:",
-                "            continue",
-                '        name = parameter.split("(", 1)[0].strip().replace(" ", "_")',
-                "        if not name:",
-                "            continue",
-                '        if name == "email":',
-                '            payload[name] = f"generated-{uuid4().hex[:10]}@example.com"',
-                '        elif name == "password":',
-                '            payload[name] = "secret-password"',
-                '        elif name == "search_product":',
-                '            payload[name] = "top"',
-                "        else:",
-                '            payload[name] = "test"',
-                "    return payload",
-                "",
-                "",
-                'def generated_account_payload(test_name: str, *, password: str = "secret-password") -> dict[str, str]:',
-                '    email = f"{test_name}-{uuid4().hex[:10]}@example.com"',
-                '    return build_account_payload("Generated User", email, password)',
-                "",
-                "",
-                "async def cleanup_generated_account(",
-                "    client: httpx.AsyncClient,",
-                "    base_url: str,",
-                "    payload: dict[str, str] | None,",
-                ") -> None:",
-                "    if not payload:",
-                "        return",
-                "    try:",
-                "        await client.request(",
-                '            "DELETE",',
-                '            f"{base_url}/api/deleteAccount",',
-                '            data={"email": payload["email"], "password": payload["password"]},',
-                "        )",
-                "    except Exception:",
-                "        return",
-                "",
-                "",
-                "async def automationexercise_request_kwargs(",
-                "    client: httpx.AsyncClient,",
-                "    *,",
-                "    base_url: str,",
-                "    test_name: str,",
-                "    path: str,",
-                "    method: str,",
-                "    scenario: str,",
-                "    request_parameters: str | None,",
-                ") -> tuple[dict[str, object], dict[str, str] | None]:",
-                "    scenario_lower = scenario.lower()",
-                "    request_kwargs: dict[str, object] = {}",
-                "    cleanup_payload: dict[str, str] | None = None",
-                "",
-                '    if path == "/api/createAccount" and method == "POST":',
-                "        cleanup_payload = generated_account_payload(test_name)",
-                '        request_kwargs["data"] = cleanup_payload',
-                "        return request_kwargs, cleanup_payload",
-                "",
-                '    if path == "/api/deleteAccount" and method == "DELETE":',
-                "        cleanup_payload = generated_account_payload(test_name)",
-                "        await client.request(",
-                '            "POST",',
-                '            f"{base_url}/api/createAccount",',
-                "            data=cleanup_payload,",
-                "        )",
-                '        request_kwargs["data"] = {',
-                '            "email": cleanup_payload["email"],',
-                '            "password": cleanup_payload["password"],',
-                "        }",
-                "        return request_kwargs, None",
-                "",
-                '    if path == "/api/updateAccount" and method == "PUT":',
-                "        original_payload = generated_account_payload(test_name)",
-                "        await client.request(",
-                '            "POST",',
-                '            f"{base_url}/api/createAccount",',
-                "            data=original_payload,",
-                "        )",
-                "        cleanup_payload = dict(original_payload)",
-                '        cleanup_payload["password"] = "updated-secret-password"',
-                '        cleanup_payload["firstname"] = "Updated"',
-                '        request_kwargs["data"] = cleanup_payload',
-                "        return request_kwargs, cleanup_payload",
-                "",
-                '    if path == "/api/getUserDetailByEmail" and method == "GET":',
-                "        cleanup_payload = generated_account_payload(test_name)",
-                "        await client.request(",
-                '            "POST",',
-                '            f"{base_url}/api/createAccount",',
-                "            data=cleanup_payload,",
-                "        )",
-                '        request_kwargs["params"] = {"email": cleanup_payload["email"]}',
-                "        return request_kwargs, cleanup_payload",
-                "",
-                '    if path == "/api/verifyLogin" and method == "POST":',
-                '        if "valid details" in scenario_lower:',
-                "            cleanup_payload = generated_account_payload(test_name)",
-                "            await client.request(",
-                '                "POST",',
-                '                f"{base_url}/api/createAccount",',
-                "                data=cleanup_payload,",
-                "            )",
-                '            request_kwargs["data"] = {',
-                '                "email": cleanup_payload["email"],',
-                '                "password": cleanup_payload["password"],',
-                "            }",
-                "            return request_kwargs, cleanup_payload",
-                '        if "without email parameter" in scenario_lower:',
-                '            request_kwargs["data"] = {"password": "secret-password"}',
-                "            return request_kwargs, cleanup_payload",
-                '        if "without password parameter" in scenario_lower:',
-                '            request_kwargs["data"] = {"email": f"generated-{uuid4().hex[:10]}@example.com"}',
-                "            return request_kwargs, cleanup_payload",
-                '        if "invalid details" in scenario_lower:',
-                '            request_kwargs["data"] = {',
-                '                "email": f"missing-{uuid4().hex[:10]}@example.com",',
-                '                "password": "wrong-password",',
-                "            }",
-                "            return request_kwargs, cleanup_payload",
-                "",
-                '    if path == "/api/searchProduct" and method == "POST":',
-                '        if "without search_product parameter" in scenario_lower:',
-                '            request_kwargs["data"] = {}',
-                "        else:",
-                '            request_kwargs["data"] = {"search_product": "top"}',
-                "        return request_kwargs, cleanup_payload",
-                "",
-                "    payload = default_request_payload(request_parameters)",
-                "    if payload:",
-                '        if method == "GET":',
-                '            request_kwargs["params"] = payload',
-                "        else:",
-                '            request_kwargs["data"] = payload',
-                "    return request_kwargs, cleanup_payload",
-                "",
-            ]
-        )
+        lines.extend(["",
+                      "def default_request_payload(request_parameters: str | None) -> dict[str, str]:",
+                      "    payload: dict[str, str] = {}",
+                      "    if not request_parameters:",
+                      "        return payload",
+                      '    for raw_parameter in request_parameters.split(","):',
+                      "        parameter = raw_parameter.strip()",
+                      "        if not parameter:",
+                      "            continue",
+                      '        name = parameter.split("(", 1)[0].strip().replace(" ", "_")',
+                      "        if not name:",
+                      "            continue",
+                      '        if name == "email":',
+                      '            payload[name] = f"generated-{uuid4().hex[:10]}@example.com"',
+                      '        elif name == "password":',
+                      '            payload[name] = "secret-password"',
+                      '        elif name == "search_product":',
+                      '            payload[name] = "top"',
+                      "        else:",
+                      '            payload[name] = "test"',
+                      "    return payload",
+                      "",
+                      "",
+                      "def generated_account_payload(",
+                      '    test_name: str, *, password: str = "secret-password"',
+                      ") -> dict[str, str]:",
+                      '    email = f"{test_name}-{uuid4().hex[:10]}@example.com"',
+                      '    return build_account_payload("Generated User", email, password)',
+                      "",
+                      "",
+                      "async def cleanup_generated_account(",
+                      "    client: httpx.AsyncClient,",
+                      "    base_url: str,",
+                      "    payload: dict[str, str] | None,",
+                      ") -> None:",
+                      "    if not payload:",
+                      "        return",
+                      "    try:",
+                      "        await client.request(",
+                      '            "DELETE",',
+                      '            f"{base_url}/api/deleteAccount",',
+                      '            data={"email": payload["email"], "password": payload["password"]},',
+                      "        )",
+                      "    except Exception:",
+                      "        return",
+                      "",
+                      "",
+                      "async def automationexercise_request_kwargs(",
+                      "    client: httpx.AsyncClient,",
+                      "    *,",
+                      "    base_url: str,",
+                      "    test_name: str,",
+                      "    path: str,",
+                      "    method: str,",
+                      "    scenario: str,",
+                      "    request_parameters: str | None,",
+                      ") -> tuple[dict[str, object], dict[str, str] | None]:",
+                      "    scenario_lower = scenario.lower()",
+                      "    request_kwargs: dict[str, object] = {}",
+                      "    cleanup_payload: dict[str, str] | None = None",
+                      "",
+                      '    if path == "/api/createAccount" and method == "POST":',
+                      "        cleanup_payload = generated_account_payload(test_name)",
+                      '        request_kwargs["data"] = cleanup_payload',
+                      "        return request_kwargs, cleanup_payload",
+                      "",
+                      '    if path == "/api/deleteAccount" and method == "DELETE":',
+                      "        cleanup_payload = generated_account_payload(test_name)",
+                      "        await client.request(",
+                      '            "POST",',
+                      '            f"{base_url}/api/createAccount",',
+                      "            data=cleanup_payload,",
+                      "        )",
+                      '        request_kwargs["data"] = {',
+                      '            "email": cleanup_payload["email"],',
+                      '            "password": cleanup_payload["password"],',
+                      "        }",
+                      "        return request_kwargs, None",
+                      "",
+                      '    if path == "/api/updateAccount" and method == "PUT":',
+                      "        original_payload = generated_account_payload(test_name)",
+                      "        await client.request(",
+                      '            "POST",',
+                      '            f"{base_url}/api/createAccount",',
+                      "            data=original_payload,",
+                      "        )",
+                      "        cleanup_payload = dict(original_payload)",
+                      '        cleanup_payload["password"] = "updated-secret-password"',
+                      '        cleanup_payload["firstname"] = "Updated"',
+                      '        request_kwargs["data"] = cleanup_payload',
+                      "        return request_kwargs, cleanup_payload",
+                      "",
+                      '    if path == "/api/getUserDetailByEmail" and method == "GET":',
+                      "        cleanup_payload = generated_account_payload(test_name)",
+                      "        await client.request(",
+                      '            "POST",',
+                      '            f"{base_url}/api/createAccount",',
+                      "            data=cleanup_payload,",
+                      "        )",
+                      '        request_kwargs["params"] = {"email": cleanup_payload["email"]}',
+                      "        return request_kwargs, cleanup_payload",
+                      "",
+                      '    if path == "/api/verifyLogin" and method == "POST":',
+                      '        if "valid details" in scenario_lower:',
+                      "            cleanup_payload = generated_account_payload(test_name)",
+                      "            await client.request(",
+                      '                "POST",',
+                      '                f"{base_url}/api/createAccount",',
+                      "                data=cleanup_payload,",
+                      "            )",
+                      '            request_kwargs["data"] = {',
+                      '                "email": cleanup_payload["email"],',
+                      '                "password": cleanup_payload["password"],',
+                      "            }",
+                      "            return request_kwargs, cleanup_payload",
+                      '        if "without email parameter" in scenario_lower:',
+                      '            request_kwargs["data"] = {"password": "secret-password"}',
+                      "            return request_kwargs, cleanup_payload",
+                      '        if "without password parameter" in scenario_lower:',
+                      '            request_kwargs["data"] = {"email": f"generated-{uuid4().hex[:10]}@example.com"}',
+                      "            return request_kwargs, cleanup_payload",
+                      '        if "invalid details" in scenario_lower:',
+                      '            request_kwargs["data"] = {',
+                      '                "email": f"missing-{uuid4().hex[:10]}@example.com",',
+                      '                "password": "wrong-password",',
+                      "            }",
+                      "            return request_kwargs, cleanup_payload",
+                      "",
+                      '    if path == "/api/searchProduct" and method == "POST":',
+                      '        if "without search_product parameter" in scenario_lower:',
+                      '            request_kwargs["data"] = {}',
+                      "        else:",
+                      '            request_kwargs["data"] = {"search_product": "top"}',
+                      "        return request_kwargs, cleanup_payload",
+                      "",
+                      "    payload = default_request_payload(request_parameters)",
+                      "    if payload:",
+                      '        if method == "GET":',
+                      '            request_kwargs["params"] = payload',
+                      "        else:",
+                      '            request_kwargs["data"] = payload',
+                      "    return request_kwargs, cleanup_payload",
+                      "",
+                      ])
 
     if include_reqres_helpers:
         lines.extend(
@@ -540,6 +612,13 @@ def render_gap_tests(
     automationexercise = _is_automationexercise(base_url)
     reqres = _is_reqres(base_url)
     include_ui_helpers = any(case.coverage_type == "ui" for case in cases)
+    generic_api = any(
+        case.coverage_type == "api"
+        and not automationexercise
+        and not reqres
+        for case in cases
+    )
+    needs_json_import = reqres or generic_api
     helper_imports: list[str] = []
     if include_ui_helpers:
         helper_imports.extend(
@@ -572,11 +651,20 @@ def render_gap_tests(
         "",
         "from __future__ import annotations",
         "",
-        "import pytest",
     ]
+    if needs_json_import:
+        header_lines.append("import json")
     if automationexercise:
         header_lines.append("import httpx")
-    header_lines.extend(["import json", ""])
+    header_lines.append("import pytest")
+    header_lines.append("")
+    if reqres:
+        header_lines.extend(
+            [
+                "from config.settings import get_settings",
+                "",
+            ]
+        )
     if automationexercise:
         header_lines.extend(
             [
@@ -593,6 +681,21 @@ def render_gap_tests(
                 "",
             ]
         )
+    header_lines.extend(
+        [
+            "from coverage_agent.decorators import covers",
+            "",
+            f"DEFAULT_BASE_URL = {base_url!r}",
+            "",
+        ]
+    )
+    if reqres:
+        header_lines.extend(
+            [
+                "_SETTINGS = get_settings()",
+                "",
+            ]
+        )
     if data_file_name:
         header_lines.extend(
             [
@@ -600,22 +703,8 @@ def render_gap_tests(
                 "",
             ]
         )
-    if reqres:
-        header_lines.extend(
-            [
-                "from config.settings import get_settings",
-                "",
-                "_SETTINGS = get_settings()",
-                "",
-            ]
-        )
     header_lines.extend(
         [
-            "from coverage_agent.decorators import covers",
-            "",
-            "",
-            f"DEFAULT_BASE_URL = {base_url!r}",
-            "",
             "pytestmark = [",
             "    pytest.mark.api,",
             "    pytest.mark.asyncio,",
@@ -637,24 +726,26 @@ def render_gap_tests(
     for case in sorted(cases, key=lambda item: (item.coverage_type, item.target)):
         name = f"{case.coverage_type}_{_identifier(case.target)}"
         rendered_target = _reqres_placeholder_target(case.target) if reqres else case.target
-        target_literal = json.dumps(rendered_target)
-        decorator = (
-            f'@covers(type="{case.coverage_type}", target={target_literal}, priority="high", '
-            f'template="{case.template}", page={page!r}, feature={feature!r}, '
-            f'presence="{case.presence}")'
+        decorator = _render_covers_decorator(
+            coverage_type=case.coverage_type,
+            target=rendered_target,
+            template=case.template,
+            page=page,
+            feature=feature,
+            presence=case.presence,
         )
         if case.coverage_type == "ui" and case.template in SUPPORTED_UI_TEMPLATES:
             functions.append(
-                f'''\n\n{decorator}
+                f'''\n{decorator}
 async def test_generated_{name}(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
     base_url = pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL
     if base_url is None:
-        base_url = getattr(settings, {base_url_setting!r})
+        base_url = settings.base_url
     async with page_factory(base_url) as browser_page:
         await browser_page.goto({page!r})
-        target = target_locator(browser_page, {target_literal})
+        target = target_locator(browser_page, {rendered_target!r})
         {_ui_assertion(case.template)}
 '''
             )
@@ -680,20 +771,21 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
                 case.api_details and str(case.api_details.get("response_payload", "")).strip()
             )
             scenario_name = (
-                repr(str(case.api_details.get("name", "")).strip())
+                _wrapped_string_literal(
+                    str(case.api_details.get("name", "")).strip(),
+                    indent=" " * 12,
+                )
                 if case.api_details
                 else "''"
             )
             case_data_ref = f"CASE_DATA.get({name!r}, {{}})"
             request_parameters = (
-                repr(str(case.api_details.get("request_parameters", "")).strip())
+                _wrapped_string_literal(
+                    str(case.api_details.get("request_parameters", "")).strip(),
+                    indent=" " * 12,
+                )
                 if case.api_details and case.api_details.get("request_parameters")
                 else "None"
-            )
-            response_payload_kind = (
-                repr(str(case.api_details.get("response_payload_kind", "message")).strip())
-                if case.api_details
-                else "'message'"
             )
             response_payload_kind_value = (
                 str(case.api_details.get("response_payload_kind", "message")).strip()
@@ -701,23 +793,32 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
                 else "message"
             )
             full_url = (
-                repr(str(case.api_details.get("full_url", "")).strip())
+                _wrapped_string_literal(
+                    str(case.api_details.get("full_url", "")).strip(),
+                    indent=" " * 12,
+                )
                 if case.api_details and case.api_details.get("full_url")
                 else "None"
             )
             rendered_path = _reqres_placeholder_path(path) if reqres else path
             rendered_full_url = (
-                repr(_reqres_placeholder_url(str(case.api_details.get("full_url", "")).strip()))
+                _wrapped_string_literal(
+                    _reqres_placeholder_url(
+                        str(case.api_details.get("full_url", "")).strip()
+                    ),
+                    indent=" " * 12,
+                )
                 if reqres and case.api_details and case.api_details.get("full_url")
                 else full_url
             )
             if automationexercise:
-                response_assertion = f'''response_payload = response.json()
-            if {response_payload_kind} == "json":
-                assert isinstance(response_payload, (dict, list))
-            else:
-                assert response_payload["responseCode"] == int({expected_code})
-                assert response_payload["message"] == {expected_message}'''
+                if response_payload_kind_value == "json":
+                    response_assertion = """response_payload = response.json()
+            assert isinstance(response_payload, (dict, list))"""
+                else:
+                    response_assertion = f"""response_payload = response.json()
+            assert response_payload["responseCode"] == int({expected_code})
+            assert response_payload["message"] == {expected_message}"""
                 body = f'''{comment_block}    url = f"{{DEFAULT_BASE_URL}}{path}"
     async with httpx.AsyncClient(
         timeout=settings.http_timeout,
@@ -726,9 +827,9 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
         request_kwargs, cleanup_payload = await automationexercise_request_kwargs(
             live_client,
             base_url=DEFAULT_BASE_URL,
-            test_name={name!r},
-            path={path!r},
-            method={method!r},
+            test_name={_wrapped_string_literal(name, indent=" " * 12)},
+            path={_wrapped_string_literal(path, indent=" " * 12)},
+            method={_wrapped_string_literal(method, indent=" " * 12)},
             scenario={scenario_name},
             request_parameters={request_parameters},
         )
@@ -741,11 +842,15 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
 '''
             elif reqres:
                 if response_payload_kind_value == "json":
-                    response_assertion = """payload = response.json() if response.content else None
+                    response_assertion = (
+                        """payload = response.json() if response.content else None
         assert isinstance(payload, (dict, list))
         rendered_payload = json.dumps(payload, sort_keys=True)
-        assert expected_response_payload in rendered_payload""" if has_expected_payload else """payload = response.json() if response.content else None
+        assert expected_response_payload in rendered_payload"""
+                        if has_expected_payload
+                        else """payload = response.json() if response.content else None
         assert isinstance(payload, (dict, list))"""
+                    )
                     reqres_case_locals = f"""    case_data = {case_data_ref}
     raw_expected_response_payload = case_data.get("response_payload", "")
     expected_response_payload = reqres_expected_payload_fragment(raw_expected_response_payload)
@@ -756,9 +861,13 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
     raw_expected_response_payload = None
     request_body = case_data.get("request_body")"""
                 else:
-                    response_assertion = """payload = response.json() if response.content else None
+                    response_assertion = (
+                        """payload = response.json() if response.content else None
         rendered_payload = json.dumps(payload, sort_keys=True)
-        assert expected_response_payload in rendered_payload""" if has_expected_payload else """payload = response.json() if response.content else None"""
+        assert expected_response_payload in rendered_payload"""
+                        if has_expected_payload
+                        else """payload = response.json() if response.content else None"""
+                    )
                     reqres_case_locals = f"""    case_data = {case_data_ref}
     raw_expected_response_payload = case_data.get("response_payload", "")
     expected_response_payload = reqres_expected_payload_fragment(raw_expected_response_payload)
@@ -766,9 +875,9 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
                 body = f'''{comment_block}{reqres_case_locals}
     resolved_path, request_kwargs, cleanup = await reqres_request_kwargs(
         reqres_http_client,
-        test_name={name!r},
-        path={rendered_path!r},
-        method={method!r},
+        test_name={_wrapped_string_literal(name, indent=" " * 12)},
+        path={_wrapped_string_literal(rendered_path, indent=" " * 12)},
+        method={_wrapped_string_literal(method, indent=" " * 12)},
         full_url={rendered_full_url},
         request_body=request_body,
         expected_response_payload=raw_expected_response_payload,
@@ -782,37 +891,47 @@ async def test_generated_{name}(page_factory, pytestconfig, settings):
 '''
             else:
                 if response_payload_kind_value == "json":
-                    response_assertion = """payload = response.json()
+                    response_assertion = (
+                        """payload = response.json()
     assert isinstance(payload, (dict, list))
     rendered_payload = json.dumps(payload, sort_keys=True)
-    assert expected_message in rendered_payload""" if has_expected_payload else """payload = response.json()
+    assert expected_message in rendered_payload"""
+                        if has_expected_payload
+                        else """payload = response.json()
     assert isinstance(payload, (dict, list))"""
+                    )
                 elif response_payload_kind_value == "none":
                     response_assertion = ""
                 else:
-                    response_assertion = f'''payload = response.json()
+                    response_assertion = (
+                        f"""payload = response.json()
     rendered_payload = json.dumps(payload, sort_keys=True)
-    assert {expected_message} in rendered_payload''' if has_expected_payload else "payload = response.json()"
+    assert {expected_message} in rendered_payload"""
+                        if has_expected_payload
+                        else "payload = response.json()"
+                    )
                 body = f'''{comment_block}    url = f"{{DEFAULT_BASE_URL}}{rendered_path}"
     response = await api_client.request("{method}", url)
     {response_status_assertion}
     {response_assertion}
 '''
             functions.append(
-                f'''\n\n{decorator}
-async def test_generated_{name}({"settings, test_diagnostics" if automationexercise else "settings, reqres_http_client" if reqres else "api_client"}):
+                f'''\n{decorator}
+async def test_generated_{name}(
+    {"settings, test_diagnostics" if automationexercise else "settings, reqres_http_client" if reqres else "api_client"}
+):
 {body}
 '''
             )
         else:
             functions.append(
-                f'''\n\n# TODO: Implement domain-specific coverage before adding this decorator:
+                f'''\n# TODO: Implement domain-specific coverage before adding this decorator:
 # {decorator}
 async def todo_generated_{name}():
     raise NotImplementedError("Add status, schema, and business outcome assertions")
 '''
             )
-    return header + "".join(functions) + "\n"
+    return header + "\n\n".join(functions) + "\n"
 
 
 def scaffold_gap_tests(
@@ -848,8 +967,7 @@ def scaffold_gap_tests(
         include_reqres_helpers=_is_reqres(base_url),
     )
 
-    destination.write_text(
-        render_gap_tests(
+    rendered_source = render_gap_tests(
             page,
             cases,
             base_url=base_url,
@@ -857,12 +975,14 @@ def scaffold_gap_tests(
             feature=feature,
             helper_module_stem=helper_stem if helper_source else None,
             data_file_name=data_filename if data_payload and helper_source else None,
-        ),
+        )
+    destination.write_text(
+        _format_generated_python(rendered_source),
         encoding="utf-8",
     )
     if helper_source:
         (destination.parent / helper_filename).write_text(
-            helper_source,
+            _format_generated_python(helper_source),
             encoding="utf-8",
         )
     if data_payload:

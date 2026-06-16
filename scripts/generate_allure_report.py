@@ -1,13 +1,13 @@
 """Generate the persistent Allure HTML report from collected test results."""
 
 from __future__ import annotations
+from utils.allure_report import generate_allure_report
 
 import argparse
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from utils.allure_report import generate_allure_report
 
 
 def main() -> int:

@@ -1,7 +1,6 @@
 """Website-specific suite configuration."""
 
 BASE_URL = "https://www.toptal.com"
-SETTINGS_BASE_URL_ATTR = None
 SUITE_NAME = "toptal_com"
 SMOKE_HEALTH_PATH = "/"
 SMOKE_HEALTH_STATUS = 200

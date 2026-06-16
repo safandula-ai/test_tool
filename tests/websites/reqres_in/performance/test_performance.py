@@ -16,7 +16,6 @@ from tests.websites.reqres_in.suite_config import (
     PERF_HOME_READY_SELECTOR,
     PERF_MOBILE_PATH,
     PERF_MOBILE_READY_SELECTOR,
-    SETTINGS_BASE_URL_ATTR,
 )
 from utils.test_diagnostics import httpx_event_hooks
 
@@ -63,9 +62,7 @@ async def test_homepage_navigation_performance_metrics(
 ):
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     max_ttfb_ms = float(os.getenv("PERFORMANCE_MAX_TTFB_MS", "800"))
     max_load_ms = float(os.getenv("PERFORMANCE_MAX_LOAD_MS", "3000"))
@@ -118,9 +115,7 @@ async def test_route_renders_under_mobile_throttling(
 ):
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     max_interactive_ms = float(os.getenv("PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS", "10000"))
 

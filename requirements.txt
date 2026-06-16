@@ -21,3 +21,8 @@ pytest-bdd>=8.1.0
 
 # Pixel-level visual regression image comparison.
 Pillow>=11.0.0
+
+# Lightweight repo style checker.
+pycodestyle>=2.14.0
+flake8>=7.1.0
+autopep8>=2.3.0

@@ -30,8 +30,6 @@ class Settings:
     env: str
     base_url: str
     api_base_url: str
-    reqres_base_url: str
-    automation_exercise_base_url: str
     reqres_api_key: str | None
     sauce_username: str
     sauce_password: str
@@ -68,11 +66,6 @@ def get_settings() -> Settings:
         env=os.getenv("ENV", "local"),
         base_url=os.getenv("BASE_URL", "https://www.saucedemo.com"),
         api_base_url=os.getenv("API_BASE_URL", "http://localhost:3000"),
-        reqres_base_url=os.getenv("REQRES_BASE_URL", "https://reqres.in"),
-        automation_exercise_base_url=os.getenv(
-            "AUTOMATION_EXERCISE_BASE_URL",
-            "https://automationexercise.com",
-        ),
         reqres_api_key=os.getenv("REQRES_API_KEY") or None,
         sauce_username=os.getenv("SAUCE_USERNAME", "standard_user"),
         sauce_password=os.getenv("SAUCE_PASSWORD", "secret_sauce"),
@@ -95,7 +88,13 @@ def get_settings() -> Settings:
                 "API_DOC_REQUEST_PARAMETER_KEYWORDS",
                 "Request Parameters:,Request Parameter:",
             ).split(","),
-            response_code_keywords=os.getenv("API_DOC_RESPONSE_CODE_KEYWORDS", "Response Code:").split(","),
-            response_payload_keywords=os.getenv("API_DOC_RESPONSE_PAYLOAD_KEYWORDS", "Response JSON:,Response Message:,Response Payload:").split(","),
+            response_code_keywords=os.getenv(
+                "API_DOC_RESPONSE_CODE_KEYWORDS",
+                "Response Code:",
+            ).split(","),
+            response_payload_keywords=os.getenv(
+                "API_DOC_RESPONSE_PAYLOAD_KEYWORDS",
+                "Response JSON:,Response Message:,Response Payload:",
+            ).split(","),
         ),
     )

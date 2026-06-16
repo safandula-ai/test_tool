@@ -18,7 +18,6 @@ from tests.websites.automationexercise_com.suite_config import (
     SECURITY_SEARCH_INPUT_SELECTOR,
     SECURITY_SEARCH_PATH,
     SECURITY_SEARCH_SUBMIT_SELECTOR,
-    SETTINGS_BASE_URL_ATTR,
 )
 
 
@@ -42,9 +41,7 @@ async def test_search_rejects_reflected_xss_payload(
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
 
@@ -108,9 +105,7 @@ async def test_http_security_defense_headers(
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     required_headers = {
         "strict-transport-security": "HSTS protocol enforcement",

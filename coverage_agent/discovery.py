@@ -35,6 +35,7 @@ class PlaywrightDiscoveryEngine:
         self.ui_element_presence: dict[str, str] = {}
         self.security_challenge_status = "not_detected"
         self.security_challenge_selector: str | None = None
+        self.discovery_mode = "live_page"
         self.settings = get_settings()
         self.scraper = get_scraper(base_url)
 
@@ -228,13 +229,13 @@ class PlaywrightDiscoveryEngine:
             context = await browser.new_context(**context_options)
             await Stealth().apply_stealth_async(context)
             page = await context.new_page()
-            
+
             async def filter_and_monitor(request: Request):
                 if request.resource_type in ("fetch", "xhr") or "/api/" in request.url:
                     await self.monitor_network(request)
-            
+
             page.on("request", lambda request: asyncio.create_task(filter_and_monitor(request)))
-            
+
             try:
                 await page.goto(
                     f"{self.base_url}/{target_path.lstrip('/')}",
@@ -266,6 +267,7 @@ class PlaywrightDiscoveryEngine:
         """Parse a documentation snapshot from coverage_agent/plugins/documentation_sources."""
         if self.scraper is None:
             raise ValueError(f"No documentation scraper registered for {self.base_url}")
+        self.discovery_mode = "documentation_file"
         source_path = self.documentation_source_path(file_name)
         content = source_path.read_text(encoding="utf-8")
         self.discovered_api_endpoints = await self.scraper.scrape_content(content)
@@ -275,15 +277,43 @@ class PlaywrightDiscoveryEngine:
         self.security_challenge_selector = None
         return self.application_manifest(self.documentation_source_page(source_path.name))
 
+    def empty_ui_reason(self) -> str | None:
+        """Explain why no UI elements were recorded, when applicable."""
+        if self.discovered_ui_elements:
+            return None
+        if self.discovery_mode == "documentation_file":
+            return "Documentation-file discovery does not scan UI elements."
+        if self.security_challenge_status == "unresolved":
+            return "UI scan did not run because a security challenge remained unresolved."
+        return (
+            "No elements with stable target attributes were found during the scan "
+            f"({', '.join(TARGET_ATTRIBUTES)})."
+        )
+
+    def empty_api_reason(self) -> str | None:
+        """Explain why no API endpoints were recorded, when applicable."""
+        if self.discovered_api_endpoints:
+            return None
+        if self.discovery_mode == "documentation_file":
+            return "The selected documentation scraper did not extract any API endpoints from the file."
+        if self.security_challenge_status == "unresolved":
+            return "API discovery did not complete because a security challenge remained unresolved."
+        if self.scraper is not None:
+            return (
+                "No API endpoints were extracted by the selected scraper and no same-site "
+                "/api/ requests were observed on this page."
+            )
+        return "No same-site /api/ requests were observed on this page."
+
     def application_manifest(self, page: str) -> dict[str, object]:
         """Build a deterministic application map."""
         normalized_page = "/" + page.lstrip("/")
-        
+
         unique_endpoints = []
         for ep in self.discovered_api_endpoints:
             if ep not in unique_endpoints:
                 unique_endpoints.append(ep)
-                
+
         manifest = {
             "page": normalized_page,
             "base_url": self.base_url,
@@ -301,7 +331,16 @@ class PlaywrightDiscoveryEngine:
                 target: self.ui_element_presence.get(target, "deterministic")
                 for target in sorted(self.discovered_ui_elements)
             },
-            "discovered_api_endpoints": sorted(unique_endpoints, key=lambda x: (x['path'], x['method'], x.get('response_code', ''))),
+            "discovered_api_endpoints": sorted(
+                unique_endpoints,
+                key=lambda x: (
+                    x["path"],
+                    x["method"],
+                    x.get("response_code", ""),
+                ),
+            ),
+            "empty_ui_reason": self.empty_ui_reason(),
+            "empty_api_reason": self.empty_api_reason(),
         }
         return manifest
 

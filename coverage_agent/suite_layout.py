@@ -26,7 +26,6 @@ from coverage_agent.decorators import covers
 from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.{suite_name}.suite_config import (
     BASE_URL,
-    SETTINGS_BASE_URL_ATTR,
     SMOKE_HEALTH_PATH,
     SMOKE_HEALTH_STATUS,
     SMOKE_RENDER_TIMEOUT_MS,
@@ -53,9 +52,7 @@ async def test_backend_gateway_health(pytestconfig, settings):
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
@@ -103,9 +100,7 @@ async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     async with page_factory(base_url) as page:
         started = perf_counter()
@@ -155,7 +150,6 @@ from tests.websites.{suite_name}.suite_config import (
     PERF_HOME_READY_SELECTOR,
     PERF_MOBILE_PATH,
     PERF_MOBILE_READY_SELECTOR,
-    SETTINGS_BASE_URL_ATTR,
 )
 from utils.test_diagnostics import httpx_event_hooks
 
@@ -204,9 +198,7 @@ async def test_homepage_navigation_performance_metrics(
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     max_ttfb_ms = float(os.getenv("PERFORMANCE_MAX_TTFB_MS", "800"))
     max_load_ms = float(os.getenv("PERFORMANCE_MAX_LOAD_MS", "3000"))
@@ -266,9 +258,7 @@ async def test_route_renders_under_mobile_throttling(
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     max_interactive_ms = float(os.getenv("PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS", "10000"))
 
@@ -327,7 +317,6 @@ from tests.websites.{suite_name}.suite_config import (
     SECURITY_SEARCH_INPUT_SELECTOR,
     SECURITY_SEARCH_PATH,
     SECURITY_SEARCH_SUBMIT_SELECTOR,
-    SETTINGS_BASE_URL_ATTR,
 )
 
 
@@ -351,9 +340,7 @@ async def test_search_rejects_reflected_xss_payload(
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
 
@@ -417,9 +404,7 @@ async def test_http_security_defense_headers(
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     required_headers = {{
         "strict-transport-security": "HSTS protocol enforcement",
@@ -492,7 +477,6 @@ def ensure_website_suite(
         config_file.write_text(
             '"""Website-specific suite configuration."""\n\n'
             f"BASE_URL = {json.dumps(normalized_url)}\n"
-            "SETTINGS_BASE_URL_ATTR = None\n"
             f"SUITE_NAME = {json.dumps(name)}\n"
             'SMOKE_HEALTH_PATH = "/"\n'
             "SMOKE_HEALTH_STATUS = 200\n"
@@ -508,7 +492,10 @@ def ensure_website_suite(
             'SECURITY_SEARCH_INPUT_SELECTOR = "input[type=\'search\'], input[name=\'search\'], input[type=\'text\']"\n'
             'SECURITY_SEARCH_SUBMIT_SELECTOR = "button[type=\'submit\'], input[type=\'submit\']"\n'
             'SECURITY_CONSENT_ROOT_SELECTOR = ".fc-consent-root"\n'
-            'SECURITY_CONSENT_ACCEPT_SELECTOR = ".fc-cta-consent, button:has-text(\'Consent\'), button:has-text(\'Accept\')"\n'
+            'SECURITY_CONSENT_ACCEPT_SELECTOR = (\n'
+            '    ".fc-cta-consent, button:has-text(\'Consent\'), "\n'
+            '    "button:has-text(\'Accept\')"\n'
+            ')\n'
             'SECURITY_CONSENT_OVERLAY_SELECTOR = ".fc-dialog-overlay"\n',
             encoding="utf-8",
         )

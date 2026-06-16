@@ -10,7 +10,6 @@ from coverage_agent.decorators import covers
 from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.reqres_in.suite_config import (
     BASE_URL,
-    SETTINGS_BASE_URL_ATTR,
     SMOKE_HEALTH_PATH,
     SMOKE_HEALTH_STATUS,
     SMOKE_RENDER_TIMEOUT_MS,
@@ -37,9 +36,7 @@ async def test_backend_gateway_health(pytestconfig, settings):
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
@@ -87,9 +84,7 @@ async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
     require_live_target(pytestconfig, settings)
     base_url = resolve_target_url(
         pytestconfig,
-        settings,
         default_base_url=BASE_URL,
-        settings_base_url_attr=SETTINGS_BASE_URL_ATTR,
     )
     async with page_factory(base_url) as page:
         started = perf_counter()

@@ -5,6 +5,7 @@ from .base import ApiScraper
 from .automationexercise import AutomationExerciseScraper
 from .reqres import ReqResScraper
 
+
 def get_scraper(base_url: str) -> ApiScraper | None:
     """Returns the appropriate scraper plugin based on the base URL."""
     netloc = urlsplit(base_url).netloc

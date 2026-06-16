@@ -1,7 +1,6 @@
 """Website-specific suite configuration."""
 
 BASE_URL = "https://automationexercise.com"
-SETTINGS_BASE_URL_ATTR = "automation_exercise_base_url"
 SUITE_NAME = "automationexercise_com"
 SMOKE_HEALTH_PATH = "/"
 SMOKE_HEALTH_STATUS = 200

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from pathlib import Path
 
 import pytest
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -67,7 +66,8 @@ async def test_form():
     assert json.loads(output.read_text(encoding="utf-8")) == result
 
 
-@covers(type="api", target="coverage-agent://analyzer/nested-functions", priority="medium", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://analyzer/nested-functions",
+        priority="medium", template="APIContractTemplate")
 def test_analyzer_ignores_nested_decorated_helpers(tmp_path):
     (tmp_path / "test_nested.py").write_text(
         """
@@ -102,6 +102,39 @@ def test_discovery_normalizes_and_filters_api_requests():
     }
     assert engine.endpoint_signature("GET", "https://other.test/api/orders") is None
     assert engine.endpoint_signature("GET", "https://example.test/api/analytics/events") is None
+
+
+@covers(type="api", target="coverage-agent://discovery/empty-manifest",
+        priority="medium", template="APIContractTemplate")
+def test_application_manifest_reports_reasons_for_empty_ui_and_api_results():
+    engine = PlaywrightDiscoveryEngine("https://reqres.in")
+
+    manifest = engine.application_manifest("/")
+
+    assert manifest["discovered_ui_elements"] == []
+    assert manifest["discovered_api_endpoints"] == []
+    assert (
+        manifest["empty_ui_reason"]
+        == "No elements with stable target attributes were found during the scan (data-testid, data-test, data-qa)."
+    )
+    assert (
+        manifest["empty_api_reason"]
+        == "No API endpoints were extracted by the selected scraper and no "
+        "same-site /api/ requests were observed on this page."
+    )
+
+
+@covers(type="api", target="coverage-agent://discovery/documentation-empty-ui",
+        priority="medium", template="APIContractTemplate")
+def test_documentation_manifest_reports_ui_not_scanned_reason():
+    engine = PlaywrightDiscoveryEngine("https://reqres.in")
+    engine.discovery_mode = "documentation_file"
+    engine.discovered_api_endpoints = [{"method": "GET", "path": "/api/users"}]
+
+    manifest = engine.application_manifest("/documentation_sources/reqres_in.html")
+
+    assert manifest["empty_ui_reason"] == "Documentation-file discovery does not scan UI elements."
+    assert manifest["empty_api_reason"] is None
 
 
 @covers(type="api", target="coverage-agent://suite-layout", priority="high", template="APIContractTemplate")
@@ -148,7 +181,8 @@ def test_website_suite_layout_creates_config_smoke_performance_and_generated_pat
     assert "Missing defense headers" in security_source
 
 
-@covers(type="api", target="coverage-agent://discovery/security-challenges", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://discovery/security-challenges",
+        priority="high", template="APIContractTemplate")
 def test_security_challenge_detection_records_clearance_and_timeout():
     class Locator:
         def __init__(self, count):
@@ -201,7 +235,8 @@ def test_security_challenge_detection_records_clearance_and_timeout():
     assert clean_engine.security_challenge_status == "not_detected"
 
 
-@covers(type="api", target="coverage-agent://discovery/progressive-scan", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://discovery/progressive-scan",
+        priority="high", template="APIContractTemplate")
 def test_progressive_scan_classifies_targets_missing_from_final_dom_as_ephemeral():
     class Element:
         def __init__(self, value):
@@ -335,7 +370,12 @@ def test_gap_analysis_returns_nonzero_for_deterministic_gaps(tmp_path, monkeypat
     assert main() == 1
 
 
-@covers(type="api", target="coverage-agent://templates/recommendations", priority="high", template="APIContractTemplate")
+@covers(
+    type="api",
+    target="coverage-agent://templates/recommendations",
+    priority="high",
+    template="APIContractTemplate",
+)
 def test_template_matching_recommends_complementary_patterns():
     assert recommend_blueprints("subscription-form", "ui") == [
         "FormValidationTemplate",
@@ -410,11 +450,7 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
     )
     output = tmp_path / "test_generated.py"
 
-    count = scaffold_gap_tests(
-        report,
-        output,
-        base_url_setting="automation_exercise_base_url",
-    )
+    count = scaffold_gap_tests(report, output)
     source = output.read_text(encoding="utf-8")
     helper = tmp_path / "_test_generated_helpers.py"
     helper_source = helper.read_text(encoding="utf-8")
@@ -457,7 +493,8 @@ def test_gap_scaffolder_generates_api_tests_from_gap_report(tmp_path):
     assert "from ._test_generated_helpers import (" not in source
 
 
-@covers(type="api", target="coverage-agent://gap-scaffolder/automationexercise", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://gap-scaffolder/automationexercise",
+        priority="high", template="APIContractTemplate")
 def test_gap_scaffolder_generates_automationexercise_payload_and_assertions(tmp_path):
     report = tmp_path / "gap_report.json"
     report.write_text(
@@ -517,7 +554,10 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
                     {
                         "method": "POST",
                         "path": "/api/collections/products/records",
-                        "full_url": "https://reqres.in/api/collections/products/records?project_id=29539",
+                        "full_url": (
+                            "https://reqres.in/api/collections/products/records"
+                            "?project_id=29539"
+                        ),
                         "response_code": "201",
                         "name": "Add a new record to Products",
                         "request_parameters": "project_id, data",
@@ -530,19 +570,36 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
                         ),
                         "response_payload": '{"data":{"id":"example"}}',
                         "response_payload_kind": "json",
-                        "target": "POST /api/collections/products/records :: Add a new record to Products | status 201",
+                        "target": (
+                            "POST /api/collections/products/records :: "
+                            "Add a new record to Products | status 201"
+                        ),
                     },
                     {
                         "method": "GET",
-                        "path": "/api/collections/products/records/4bec354b-b22b-4824-b091-3c9821837c9e",
-                        "full_url": "https://reqres.in/api/collections/products/records/4bec354b-b22b-4824-b091-3c9821837c9e?project_id=29539",
+                        "path": (
+                            "/api/collections/products/records/"
+                            "4bec354b-b22b-4824-b091-3c9821837c9e"
+                        ),
+                        "full_url": (
+                            "https://reqres.in/api/collections/products/records/"
+                            "4bec354b-b22b-4824-b091-3c9821837c9e"
+                            "?project_id=29539"
+                        ),
                         "response_code": "200",
                         "name": "Fetch a single record by ID",
                         "request_parameters": "project_id",
-                        "response_payload": '{"data":{"id":"4bec354b-b22b-4824-b091-3c9821837c9e","data":{"name":"Wireless Headphones"}}}',
+                        "response_payload": (
+                            '{"data":{"id":"4bec354b-b22b-4824-b091-3c9821837c9e",'
+                            '"data":{"name":"Wireless Headphones"}}}'
+                        ),
                         "response_payload_kind": "json",
-                        "target": "GET /api/collections/products/records/4bec354b-b22b-4824-b091-3c9821837c9e :: Fetch a single record by ID | status 200",
-                    }
+                        "target": (
+                            "GET /api/collections/products/records/"
+                            "4bec354b-b22b-4824-b091-3c9821837c9e :: "
+                            "Fetch a single record by ID | status 200"
+                        ),
+                    },
                 ],
                 "errors": [],
             }
@@ -575,7 +632,8 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
         in source
     )
     assert (
-        'target="GET /api/collections/products/records/{record_id_filled_during_test} :: Fetch a single record by ID | status 200"'
+        'target="GET /api/collections/products/records/'
+        '{record_id_filled_during_test} :: Fetch a single record by ID | status 200"'
         in source
     )
     assert 'response = await reqres_http_client.request("POST", resolved_path, **request_kwargs)' in source
@@ -604,7 +662,8 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
     compile(helper_source, str(helper), "exec")
 
 
-@covers(type="api", target="coverage-agent://automationexercise-scraper", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://automationexercise-scraper",
+        priority="high", template="APIContractTemplate")
 def test_automationexercise_scraper_captures_request_parameters_and_titles():
     class Page:
         async def evaluate(self, script):
@@ -636,7 +695,8 @@ def test_automationexercise_scraper_captures_request_parameters_and_titles():
     ]
 
 
-@covers(type="api", target="coverage-agent://automationexercise-scraper/json-payload", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://automationexercise-scraper/json-payload",
+        priority="high", template="APIContractTemplate")
 def test_automationexercise_scraper_marks_response_json_payloads():
     class Page:
         async def evaluate(self, script):
@@ -748,7 +808,8 @@ def test_discover_parser_accepts_file_instead_of_path():
     assert args.path is None
 
 
-@covers(type="api", target="coverage-agent://reqres-scraper/file-discovery", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://reqres-scraper/file-discovery",
+        priority="high", template="APIContractTemplate")
 def test_discovery_engine_can_build_manifest_from_documentation_file():
     engine = PlaywrightDiscoveryEngine("https://reqres.in")
 
@@ -774,7 +835,8 @@ def test_discovery_engine_can_build_manifest_from_documentation_file():
     )
 
 
-@covers(type="api", target="coverage-agent://gap-scaffolder/response-json", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://gap-scaffolder/response-json",
+        priority="high", template="APIContractTemplate")
 def test_gap_scaffolder_generates_json_response_assertion(tmp_path):
     report = tmp_path / "gap_report.json"
     report.write_text(
@@ -811,7 +873,8 @@ def test_gap_scaffolder_generates_json_response_assertion(tmp_path):
     compile(source, str(output), "exec")
 
 
-@covers(type="api", target="coverage-agent://gap-scaffolder/response-none", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://gap-scaffolder/response-none",
+        priority="high", template="APIContractTemplate")
 def test_gap_scaffolder_omits_unused_expected_payload_for_empty_responses(tmp_path):
     report = tmp_path / "gap_report.json"
     report.write_text(
@@ -846,7 +909,8 @@ def test_gap_scaffolder_omits_unused_expected_payload_for_empty_responses(tmp_pa
     compile(source, str(output), "exec")
 
 
-@covers(type="api", target="coverage-agent://gap-analysis/api-scenarios", priority="high", template="APIContractTemplate")
+@covers(type="api", target="coverage-agent://gap-analysis/api-scenarios",
+        priority="high", template="APIContractTemplate")
 def test_gap_analysis_preserves_distinct_api_scenarios():
     engine = GapAnalysisEngine(
         {

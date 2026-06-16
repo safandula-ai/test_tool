@@ -100,38 +100,45 @@ def logger(settings: Settings):
     return get_logger(settings.log_level)
 
 
+@pytest.fixture
+def http_client_factory(
+    settings: Settings,
+    test_diagnostics: TestDiagnosticRecorder,
+) -> Callable[..., AsyncContextManager[httpx.AsyncClient]]:
+    """Build instrumented async HTTP clients with per-test diagnostics."""
+
+    @asynccontextmanager
+    async def create_client(
+        *,
+        base_url: str,
+        headers: dict[str, str] | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        follow_redirects: bool = False,
+    ) -> AsyncIterator[httpx.AsyncClient]:
+        async with httpx.AsyncClient(
+            base_url=base_url,
+            headers=headers,
+            transport=transport,
+            timeout=settings.http_timeout,
+            follow_redirects=follow_redirects,
+            event_hooks=httpx_event_hooks(test_diagnostics),
+        ) as client:
+            yield client
+
+    return create_client
+
+
 @pytest_asyncio.fixture
 async def api_client(
     settings: Settings,
-    test_diagnostics: TestDiagnosticRecorder,
+    http_client_factory: Callable[..., AsyncContextManager[httpx.AsyncClient]],
 ) -> AsyncIterator[httpx.AsyncClient]:
     """Provide an async HTTP client bound to the API base URL."""
-    transport = build_transport()
-    client = httpx.AsyncClient(
+    async with http_client_factory(
         base_url=settings.api_base_url,
-        transport=transport,
-        timeout=settings.http_timeout,
-        event_hooks=httpx_event_hooks(test_diagnostics),
-    )
-    yield client
-    await client.aclose()
-
-
-@pytest_asyncio.fixture
-async def reqres_http_client(
-    settings: Settings,
-    test_diagnostics: TestDiagnosticRecorder,
-) -> AsyncIterator[httpx.AsyncClient]:
-    """Provide an authenticated client for opt-in live ReqRes tests."""
-    headers = {"x-api-key": settings.reqres_api_key} if settings.reqres_api_key else {}
-    client = httpx.AsyncClient(
-        base_url=settings.reqres_base_url,
-        headers=headers,
-        timeout=settings.http_timeout,
-        event_hooks=httpx_event_hooks(test_diagnostics),
-    )
-    yield client
-    await client.aclose()
+        transport=build_transport(),
+    ) as client:
+        yield client
 
 
 @pytest.fixture
@@ -224,10 +231,19 @@ def page_factory(
                 )
                 failed = getattr(request.node, "rep_call", None) and request.node.rep_call.failed
                 if failed and settings.screenshot_on_failure:
-                    await page.screenshot(path=str(settings.screenshot_dir / f"{request.node.name}.png"), full_page=True)
+                    await page.screenshot(
+                        path=str(
+                            settings.screenshot_dir / f"{request.node.name}.png"
+                        ),
+                        full_page=True,
+                    )
                 if settings.trace_on_failure:
                     if failed:
-                        await context.tracing.stop(path=str(settings.artifact_dir / f"{request.node.name}.zip"))
+                        await context.tracing.stop(
+                            path=str(
+                                settings.artifact_dir / f"{request.node.name}.zip"
+                            )
+                        )
                     else:
                         await context.tracing.stop()
                 await context.close()

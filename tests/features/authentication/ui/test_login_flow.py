@@ -8,8 +8,18 @@ from pages.login_page import LoginPage
 
 @pytest.mark.ui
 @pytest.mark.asyncio
-@covers(type="ui", target="login-submit", priority="high", template="InteractionTemplate", page="/login", feature="feature:authentication")
-@covers(type="ui", target="login-banner", priority="high", template="ComponentVisibilityTemplate", page="/login", feature="feature:authentication")
+@covers(type="ui",
+        target="login-submit",
+        priority="high",
+        template="InteractionTemplate",
+        page="/login",
+        feature="feature:authentication")
+@covers(type="ui",
+        target="login-banner",
+        priority="high",
+        template="ComponentVisibilityTemplate",
+        page="/login",
+        feature="feature:authentication")
 async def test_login_page_smoke(page_factory):
     """Smoke test the login page object against a minimal DOM."""
     async with page_factory() as page:

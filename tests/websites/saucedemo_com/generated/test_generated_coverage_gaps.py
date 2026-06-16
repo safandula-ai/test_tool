@@ -39,7 +39,8 @@ async def _assert_interaction(target) -> None:
     await expect(target).to_be_enabled()
 
 
-@covers(type="ui", target="login-button", priority="high", template="InteractionTemplate", page='/', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="ui", target="login-button", priority="high", template="InteractionTemplate",
+        page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_login_button(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
@@ -52,7 +53,8 @@ async def test_generated_ui_login_button(page_factory, pytestconfig, settings):
         await _assert_interaction(target)
 
 
-@covers(type="ui", target="login-container", priority="high", template="ComponentVisibilityTemplate", page='/', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="ui", target="login-container", priority="high", template="ComponentVisibilityTemplate",
+        page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_login_container(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
@@ -65,7 +67,8 @@ async def test_generated_ui_login_container(page_factory, pytestconfig, settings
         await expect(target).to_be_visible()
 
 
-@covers(type="ui", target="login-credentials", priority="high", template="ComponentVisibilityTemplate", page='/', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="ui", target="login-credentials", priority="high", template="ComponentVisibilityTemplate",
+        page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_login_credentials(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
@@ -78,7 +81,13 @@ async def test_generated_ui_login_credentials(page_factory, pytestconfig, settin
         await expect(target).to_be_visible()
 
 
-@covers(type="ui", target="login-credentials-container", priority="high", template="ComponentVisibilityTemplate", page='/', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="ui",
+        target="login-credentials-container",
+        priority="high",
+        template="ComponentVisibilityTemplate",
+        page='/',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
 async def test_generated_ui_login_credentials_container(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
@@ -91,7 +100,8 @@ async def test_generated_ui_login_credentials_container(page_factory, pytestconf
         await expect(target).to_be_visible()
 
 
-@covers(type="ui", target="password", priority="high", template="InputValidationTemplate", page='/', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="ui", target="password", priority="high", template="InputValidationTemplate",
+        page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_password(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
@@ -104,7 +114,8 @@ async def test_generated_ui_password(page_factory, pytestconfig, settings):
         await _assert_input_validation(target)
 
 
-@covers(type="ui", target="username", priority="high", template="ComponentVisibilityTemplate", page='/', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="ui", target="username", priority="high", template="ComponentVisibilityTemplate",
+        page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_username(page_factory, pytestconfig, settings):
     if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
         pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
@@ -115,4 +126,3 @@ async def test_generated_ui_username(page_factory, pytestconfig, settings):
         await browser_page.goto('/')
         target = _target(browser_page, "username")
         await expect(target).to_be_visible()
-

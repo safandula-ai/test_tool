@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 import httpx
-import json
+import pytest
 
 from utils.test_diagnostics import httpx_event_hooks
 
@@ -23,8 +22,16 @@ pytestmark = [
     pytest.mark.asyncio,
 ]
 
-@covers(type="api", target="DELETE /api/deleteAccount :: DELETE METHOD To Delete User Account | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_delete_api_deleteaccount_delete_method_to_delete_user_account_status_200(settings, test_diagnostics):
+
+@covers(type="api",
+        target="DELETE /api/deleteAccount :: DELETE METHOD To Delete User Account | status 200",
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_delete_api_deleteaccount_delete_method_to_delete_user_account_status_200(
+        settings, test_diagnostics):
     # Scenario: DELETE METHOD To Delete User Account
     # Request Parameters: email, password
     # Expected Response Code: 200
@@ -56,8 +63,12 @@ async def test_generated_api_delete_api_deleteaccount_delete_method_to_delete_us
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="DELETE /api/verifyLogin :: DELETE To Verify Login | status 405", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="api", target="DELETE /api/verifyLogin :: DELETE To Verify Login | status 405", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
 async def test_generated_api_delete_api_verifylogin_delete_to_verify_login_status_405(settings, test_diagnostics):
     # Scenario: DELETE To Verify Login
     # Expected Response Code: 405
@@ -89,8 +100,12 @@ async def test_generated_api_delete_api_verifylogin_delete_to_verify_login_statu
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="GET /api/brandsList :: Get All Brands List | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="api", target="GET /api/brandsList :: Get All Brands List | status 200", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
 async def test_generated_api_get_api_brandslist_get_all_brands_list_status_200(settings, test_diagnostics):
     # Scenario: Get All Brands List
     # Expected Response Code: 200
@@ -122,9 +137,15 @@ async def test_generated_api_get_api_brandslist_get_all_brands_list_status_200(s
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="GET /api/getUserDetailByEmail :: GET user account detail by email | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_get_api_getuserdetailbyemail_get_user_account_detail_by_email_status_200(settings, test_diagnostics):
+@covers(type="api",
+        target="GET /api/getUserDetailByEmail :: GET user account detail by email | status 200",
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_get_api_getuserdetailbyemail_get_user_account_detail_by_email_status_200(
+        settings, test_diagnostics):
     # Scenario: GET user account detail by email
     # Request Parameters: email
     # Expected Response Code: 200
@@ -156,8 +177,12 @@ async def test_generated_api_get_api_getuserdetailbyemail_get_user_account_detai
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="GET /api/productsList :: Get All Products List | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="api", target="GET /api/productsList :: Get All Products List | status 200", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
 async def test_generated_api_get_api_productslist_get_all_products_list_status_200(settings, test_diagnostics):
     # Scenario: Get All Products List
     # Expected Response Code: 200
@@ -189,11 +214,21 @@ async def test_generated_api_get_api_productslist_get_all_products_list_status_2
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/createAccount :: POST To Create/Register User Account | status 201", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_post_api_createaccount_post_to_create_register_user_account_status_201(settings, test_diagnostics):
+@covers(type="api",
+        target=("POST /api/createAccount :: POST To Create/Register User "
+                "Account | status 201"),
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_post_api_createaccount_post_to_create_register_user_account_status_201(
+        settings, test_diagnostics):
     # Scenario: POST To Create/Register User Account
-    # Request Parameters: name, email, password, title (for example: Mr, Mrs, Miss), birth_date, birth_month, birth_year, firstname, lastname, company, address1, address2, country, zipcode, state, city, mobile_number
+    # Request Parameters: name, email, password, title (for example: Mr, Mrs,
+    #   Miss), birth_date, birth_month, birth_year, firstname, lastname,
+    #   company, address1, address2, country, zipcode, state, city,
+    #   mobile_number
     # Expected Response Code: 201
     # Expected Response Message: User created!
     url = f"{DEFAULT_BASE_URL}/api/createAccount"
@@ -208,7 +243,12 @@ async def test_generated_api_post_api_createaccount_post_to_create_register_user
             path='/api/createAccount',
             method='POST',
             scenario='POST To Create/Register User Account',
-            request_parameters='name, email, password, title (for example: Mr, Mrs, Miss), birth_date, birth_month, birth_year, firstname, lastname, company, address1, address2, country, zipcode, state, city, mobile_number',
+            request_parameters=(
+                'name, email, password, title (for example: Mr, Mrs, Miss), '
+                'birth_date, birth_month, birth_year, firstname, lastname, '
+                'company, address1, address2, country, zipcode, state, city, '
+                'mobile_number'
+            ),
         )
         try:
             response = await live_client.request("POST", url, **request_kwargs)
@@ -223,8 +263,12 @@ async def test_generated_api_post_api_createaccount_post_to_create_register_user
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/productsList :: POST To All Products List | status 405", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="api", target="POST /api/productsList :: POST To All Products List | status 405", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
 async def test_generated_api_post_api_productslist_post_to_all_products_list_status_405(settings, test_diagnostics):
     # Scenario: POST To All Products List
     # Expected Response Code: 405
@@ -256,9 +300,16 @@ async def test_generated_api_post_api_productslist_post_to_all_products_list_sta
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/searchProduct :: POST To Search Product without search_product parameter | status 400", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_post_api_searchproduct_post_to_search_product_without_search_product_parameter_status_400(settings, test_diagnostics):
+@covers(type="api",
+        target="POST /api/searchProduct :: POST To Search Product without search_product parameter | status 400",
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_post_api_searchproduct_post_to_search_product_without_search_product_parameter_status_400(
+        settings,
+        test_diagnostics):
     # Scenario: POST To Search Product without search_product parameter
     # Expected Response Code: 400
     # Expected Response Message: Bad request, search_product parameter is missing in POST request.
@@ -284,13 +335,20 @@ async def test_generated_api_post_api_searchproduct_post_to_search_product_witho
                 assert isinstance(response_payload, (dict, list))
             else:
                 assert response_payload["responseCode"] == int('400')
-                assert response_payload["message"] == 'Bad request, search_product parameter is missing in POST request.'
+                assert response_payload["message"] == (
+                    'Bad request, search_product parameter is missing in POST '
+                    'request.'
+                )
         finally:
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/searchProduct :: POST To Search Product | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="api", target="POST /api/searchProduct :: POST To Search Product | status 200", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
 async def test_generated_api_post_api_searchproduct_post_to_search_product_status_200(settings, test_diagnostics):
     # Scenario: POST To Search Product
     # Request Parameters: search_product (For example: top, tshirt, jean)
@@ -323,9 +381,15 @@ async def test_generated_api_post_api_searchproduct_post_to_search_product_statu
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/verifyLogin :: POST To Verify Login with invalid details | status 404", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_post_api_verifylogin_post_to_verify_login_with_invalid_details_status_404(settings, test_diagnostics):
+@covers(type="api",
+        target="POST /api/verifyLogin :: POST To Verify Login with invalid details | status 404",
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_post_api_verifylogin_post_to_verify_login_with_invalid_details_status_404(
+        settings, test_diagnostics):
     # Scenario: POST To Verify Login with invalid details
     # Request Parameters: email, password (invalid values)
     # Expected Response Code: 404
@@ -357,9 +421,16 @@ async def test_generated_api_post_api_verifylogin_post_to_verify_login_with_inva
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/verifyLogin :: POST To Verify Login with valid details | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_post_api_verifylogin_post_to_verify_login_with_valid_details_status_200(settings, test_diagnostics):
+@covers(type="api",
+        target=("POST /api/verifyLogin :: POST To Verify Login with valid "
+                "details | status 200"),
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_post_api_verifylogin_post_to_verify_login_with_valid_details_status_200(
+        settings, test_diagnostics):
     # Scenario: POST To Verify Login with valid details
     # Request Parameters: email, password
     # Expected Response Code: 200
@@ -391,9 +462,15 @@ async def test_generated_api_post_api_verifylogin_post_to_verify_login_with_vali
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="POST /api/verifyLogin :: POST To Verify Login without email parameter | status 400", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_post_api_verifylogin_post_to_verify_login_without_email_parameter_status_400(settings, test_diagnostics):
+@covers(type="api",
+        target="POST /api/verifyLogin :: POST To Verify Login without email parameter | status 400",
+        priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic")
+async def test_generated_api_post_api_verifylogin_post_to_verify_login_without_email_parameter_status_400(
+        settings, test_diagnostics):
     # Scenario: POST To Verify Login without email parameter
     # Request Parameters: password
     # Expected Response Code: 400
@@ -420,13 +497,20 @@ async def test_generated_api_post_api_verifylogin_post_to_verify_login_without_e
                 assert isinstance(response_payload, (dict, list))
             else:
                 assert response_payload["responseCode"] == int('400')
-                assert response_payload["message"] == 'Bad request, email or password parameter is missing in POST request.'
+                assert response_payload["message"] == (
+                    'Bad request, email or password parameter is missing in '
+                    'POST request.'
+                )
         finally:
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="PUT /api/brandsList :: PUT To All Brands List | status 405", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
+@covers(type="api", target="PUT /api/brandsList :: PUT To All Brands List | status 405", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
 async def test_generated_api_put_api_brandslist_put_to_all_brands_list_status_405(settings, test_diagnostics):
     # Scenario: PUT To All Brands List
     # Expected Response Code: 405
@@ -458,11 +542,19 @@ async def test_generated_api_put_api_brandslist_put_to_all_brands_list_status_40
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
 
 
-
-@covers(type="api", target="PUT /api/updateAccount :: PUT METHOD To Update User Account | status 200", priority="high", template="ApiServiceTemplate", page='/api_list', feature='feature:generated-gap-coverage', presence="deterministic")
-async def test_generated_api_put_api_updateaccount_put_method_to_update_user_account_status_200(settings, test_diagnostics):
+@covers(type="api", target="PUT /api/updateAccount :: PUT METHOD To Update User Account | status 200", priority="high",
+        template="ApiServiceTemplate",
+        page='/api_list',
+        feature='feature:generated-gap-coverage',
+        presence="deterministic",
+        )
+async def test_generated_api_put_api_updateaccount_put_method_to_update_user_account_status_200(
+        settings, test_diagnostics):
     # Scenario: PUT METHOD To Update User Account
-    # Request Parameters: name, email, password, title (for example: Mr, Mrs, Miss), birth_date, birth_month, birth_year, firstname, lastname, company, address1, address2, country, zipcode, state, city, mobile_number
+    # Request Parameters: name, email, password, title (for example: Mr, Mrs,
+    #   Miss), birth_date, birth_month, birth_year, firstname, lastname,
+    #   company, address1, address2, country, zipcode, state, city,
+    #   mobile_number
     # Expected Response Code: 200
     # Expected Response Message: User updated!
     url = f"{DEFAULT_BASE_URL}/api/updateAccount"
@@ -477,7 +569,12 @@ async def test_generated_api_put_api_updateaccount_put_method_to_update_user_acc
             path='/api/updateAccount',
             method='PUT',
             scenario='PUT METHOD To Update User Account',
-            request_parameters='name, email, password, title (for example: Mr, Mrs, Miss), birth_date, birth_month, birth_year, firstname, lastname, company, address1, address2, country, zipcode, state, city, mobile_number',
+            request_parameters=(
+                'name, email, password, title (for example: Mr, Mrs, Miss), '
+                'birth_date, birth_month, birth_year, firstname, lastname, '
+                'company, address1, address2, country, zipcode, state, city, '
+                'mobile_number'
+            ),
         )
         try:
             response = await live_client.request("PUT", url, **request_kwargs)
@@ -490,5 +587,3 @@ async def test_generated_api_put_api_updateaccount_put_method_to_update_user_acc
                 assert response_payload["message"] == 'User updated!'
         finally:
             await cleanup_generated_account(live_client, DEFAULT_BASE_URL, cleanup_payload)
-
-

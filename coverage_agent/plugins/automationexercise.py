@@ -46,7 +46,10 @@ class AutomationExerciseScraper(ApiScraper):
             method_keyword_pattern = "|".join(re.escape(k) for k in settings.api_doc_settings.method_keywords)
 
             url_match = re.search(fr'(?:{url_keyword_pattern})\s*(?P<url>https?://[^\s]+|/[^\s]+)', block)
-            method_match = re.search(fr'(?:{method_keyword_pattern})\s*(?P<method>GET|POST|PUT|DELETE)', block, re.IGNORECASE)
+            method_match = re.search(
+                fr'(?:{method_keyword_pattern})\s*(?P<method>GET|POST|PUT|DELETE)',
+                block,
+                re.IGNORECASE)
 
             if url_match and method_match:
                 url = url_match.group("url")
@@ -71,7 +74,8 @@ class AutomationExerciseScraper(ApiScraper):
                             "parameters"
                         ).strip()
 
-                    code_keyword_pattern = "|".join(re.escape(k) for k in settings.api_doc_settings.response_code_keywords)
+                    code_keyword_pattern = "|".join(re.escape(k)
+                                                    for k in settings.api_doc_settings.response_code_keywords)
                     code_match = re.search(fr'(?:{code_keyword_pattern})\s*(?P<code>\d+)', block)
                     if code_match:
                         endpoint_data["response_code"] = code_match.group("code")
@@ -92,5 +96,5 @@ class AutomationExerciseScraper(ApiScraper):
 
                     if endpoint_data not in discovered_api_endpoints:
                         discovered_api_endpoints.append(endpoint_data)
-        
+
         return discovered_api_endpoints
