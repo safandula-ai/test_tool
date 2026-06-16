@@ -26,9 +26,11 @@ class TestDiagnosticRecorder:
     log_lines: list[str] = field(default_factory=list)
 
     def record(self, category: str, **values: Any) -> None:
+        """Append one structured diagnostic event to the current test payload."""
         self.events.append({"category": category, **values})
 
     def payload(self, item: pytest.Item) -> dict[str, Any]:
+        """Build the final JSON-serializable diagnostics payload for a pytest item."""
         call = getattr(item, "rep_call", None)
         setup = getattr(item, "rep_setup", None)
         outcome = "unknown"
@@ -143,27 +145,11 @@ def emit_test_diagnostics(
     item: pytest.Item,
     recorder: TestDiagnosticRecorder,
 ) -> dict[str, Any]:
-    """Write diagnostics to terminal, per-test capture, and Allure."""
+    """Write diagnostics to terminal and per-test capture."""
     payload = recorder.payload(item)
     rendered = render_test_diagnostics(item, recorder)
     print(f"TEST DIAGNOSTICS\n{rendered}", flush=True)
     terminal = pytestconfig.pluginmanager.get_plugin("terminalreporter")
     if terminal is not None:
         terminal.write_line(f"TEST DIAGNOSTICS\n{rendered}")
-    try:
-        import allure
-
-        allure.attach(
-            rendered,
-            name="test-diagnostics",
-            attachment_type=allure.attachment_type.JSON,
-        )
-        if recorder.log_lines:
-            allure.attach(
-                "\n".join(recorder.log_lines),
-                name="test-log",
-                attachment_type=allure.attachment_type.TEXT,
-            )
-    except (ImportError, RuntimeError):
-        pass
     return payload

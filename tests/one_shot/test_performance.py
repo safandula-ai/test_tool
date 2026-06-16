@@ -18,7 +18,7 @@ from coverage_agent.decorators import covers
 from utils.test_diagnostics import httpx_event_hooks
 
 
-DEFAULT_BASE_URL = os.getenv("BASE_URL", "https://example.test")
+DEFAULT_BASE_URL = os.getenv("BASE_URL") or None
 PERF_HOME_PATH = os.getenv("ONE_SHOT_PERF_HOME_PATH", "/")
 PERF_HOME_READY_SELECTOR = os.getenv("ONE_SHOT_PERF_HOME_READY_SELECTOR", "body")
 PERF_MOBILE_PATH = os.getenv("ONE_SHOT_PERF_MOBILE_PATH", "/")
@@ -26,17 +26,18 @@ PERF_MOBILE_READY_SELECTOR = os.getenv("ONE_SHOT_PERF_MOBILE_READY_SELECTOR", "b
 
 
 def _target_url(pytestconfig):
-    return (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL).rstrip("/")
+    target_url = pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL
+    return target_url.rstrip("/")
 
 
-def _require_live_target(pytestconfig, settings):
-    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+def _require_live_target(pytestconfig):
+    if not (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL):
+        pytest.skip("Set BASE_URL or pass --target-url")
 
 
 @pytest.fixture
-def require_live_target_enabled(pytestconfig, settings):
-    _require_live_target(pytestconfig, settings)
+def require_live_target_enabled(pytestconfig):
+    _require_live_target(pytestconfig)
 
 
 pytestmark = pytest.mark.usefixtures("require_live_target_enabled")

@@ -10,8 +10,6 @@ env/
 # Local secrets and generated artifacts
 .env
 .env.local
-allure-results/
-allure-report/
 logs/*
 reports/*
 !logs/.gitkeep

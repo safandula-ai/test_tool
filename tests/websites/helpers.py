@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def resolve_target_url(
     pytestconfig,
@@ -18,9 +16,8 @@ def resolve_target_url(
 
 
 def require_live_target(pytestconfig, settings) -> None:
-    """Skip suite tests unless live execution is explicitly enabled."""
-    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+    """Website suites always run against suite_config.py or a terminal override."""
+    _ = (pytestconfig, settings)
 
 
 async def dismiss_consent_if_present(

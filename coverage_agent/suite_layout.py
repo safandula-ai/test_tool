@@ -158,13 +158,15 @@ from utils.test_diagnostics import httpx_event_hooks
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_target_response_time(
-    target_url,
-    live_target_enabled,
+    pytestconfig,
     settings,
     test_diagnostics,
 ):
-    if not live_target_enabled:
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+    require_live_target(pytestconfig, settings)
+    target_url = resolve_target_url(
+        pytestconfig,
+        default_base_url=BASE_URL,
+    )
     maximum_ms = float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))
     started = time.perf_counter()
     async with httpx.AsyncClient(
@@ -445,6 +447,14 @@ class WebsiteSuite:
     @property
     def generated_test_file(self) -> Path:
         return self.root / "generated" / "test_generated_coverage_gaps.py"
+
+    @property
+    def generated_ui_test_file(self) -> Path:
+        return self.root / "generated" / "test_generated_coverage_gaps_ui.py"
+
+    @property
+    def generated_api_test_file(self) -> Path:
+        return self.root / "generated" / "test_generated_coverage_gaps_api.py"
 
 
 def website_slug(base_url: str) -> str:

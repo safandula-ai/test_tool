@@ -14,7 +14,7 @@ class GapReport:
 
     base_url: str
     page: str
-    untested_ui_elements: list[str] = field(default_factory=list)
+    untested_ui_elements: list[object] = field(default_factory=list)
     untested_api_endpoints: list[object] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -56,11 +56,21 @@ class GapAnalysisEngine:
         )
 
         discovered_ui = set(self.application_map.get("discovered_ui_elements", []))
+        ui_presence = self.application_map.get("ui_element_presence", {})
+        ui_details = self.application_map.get("ui_element_details", {})
         covered_ui = set(self.coverage_map.get("ui_targets", []))
         untested_ui = sorted(list(discovered_ui - covered_ui))
+        normalized_ui = [
+            self._normalize_ui_element(
+                target,
+                presence=str(ui_presence.get(target, "deterministic")),
+                observed=ui_details.get(target),
+            )
+            for target in untested_ui
+        ]
 
         return self._build_report(
-            untested_ui_elements=untested_ui,
+            untested_ui_elements=normalized_ui,
             untested_api_endpoints=untested_api,
         )
 
@@ -82,7 +92,12 @@ class GapAnalysisEngine:
             )
         if report["untested_ui_elements"]:
             lines.append("\nUNTESTED UI ELEMENTS:")
-            lines.extend(f"  - {element}" for element in report["untested_ui_elements"])
+            lines.extend(
+                f"  - {element['target']}"
+                if isinstance(element, dict)
+                else f"  - {element}"
+                for element in report["untested_ui_elements"]
+            )
 
         if not report["untested_api_endpoints"] and not report["untested_ui_elements"]:
             return "No coverage gaps detected."
@@ -144,6 +159,22 @@ class GapAnalysisEngine:
             normalized["target"] = f"{base_target} :: {' | '.join(scenario_parts)}"
         else:
             normalized["target"] = base_target
+        return normalized
+
+    def _normalize_ui_element(
+        self,
+        target: str,
+        *,
+        presence: str,
+        observed: object,
+    ) -> dict[str, object]:
+        """Return a report-ready UI element with snapshot metadata."""
+        normalized: dict[str, object] = {
+            "target": target,
+            "presence": presence,
+        }
+        if isinstance(observed, dict) and observed:
+            normalized["observed"] = observed
         return normalized
 
     def write_gap_manifest(self, output_file: str | Path) -> dict[str, object]:

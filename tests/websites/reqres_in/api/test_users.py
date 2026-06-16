@@ -19,8 +19,8 @@ async def test_reqres_client_collects_and_validates_all_user_pages(api_client):
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not (get_settings().run_live_tests and get_settings().reqres_api_key),
-    reason="Set RUN_LIVE_TESTS=true and REQRES_API_KEY to call ReqRes",
+    not get_settings().reqres_api_key,
+    reason="Set REQRES_API_KEY to call ReqRes",
 )
 @covers(type="api", target="GET /api/users", priority="high", template="APIContractTemplate")
 async def test_live_reqres_users_follow_pagination(reqres_http_client):

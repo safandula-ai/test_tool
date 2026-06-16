@@ -7,7 +7,7 @@ import pytest
 
 from config.settings import get_settings
 
-from ._test_generated_coverage_gaps_helpers import (
+from ._test_generated_coverage_gaps_api_helpers import (
     cleanup_reqres_record,
     load_generated_case_data,
     reqres_expected_payload_fragment,
@@ -20,14 +20,14 @@ DEFAULT_BASE_URL = 'https://reqres.in'
 
 _SETTINGS = get_settings()
 
-CASE_DATA = load_generated_case_data(__file__, '_test_generated_coverage_gaps_data.json')
+CASE_DATA = load_generated_case_data(__file__, '_test_generated_coverage_gaps_api_data.json')
 
 pytestmark = [
-    pytest.mark.api,
     pytest.mark.asyncio,
+    pytest.mark.api,
     pytest.mark.skipif(
-        not _SETTINGS.run_live_tests or not _SETTINGS.reqres_api_key,
-        reason="Set RUN_LIVE_TESTS=true and REQRES_API_KEY for ReqRes generated API coverage",
+        not _SETTINGS.reqres_api_key,
+        reason="Set REQRES_API_KEY for ReqRes generated API coverage",
     ),
 ]
 

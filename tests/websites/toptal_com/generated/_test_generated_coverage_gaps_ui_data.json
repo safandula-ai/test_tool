@@ -1,0 +1,631 @@
+{
+  "ui_author_label": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "author-label",
+      "tag_name": "span",
+      "visibility_state": "visible",
+      "text": "By",
+      "data_testid": "author-label"
+    }
+  },
+  "ui_avatar": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "avatar",
+      "tag_name": "figure",
+      "visibility_state": "visible",
+      "data_testid": "avatar",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fverticalized_talent_grid_section%2Fvertical%2Ftalent%2F10760210%2Favatar%2Foptimized%2FAdam%2520Ivansky_retouched-4f8361ec735514bf4fa53e0bb7466a6c.png&width=360",
+      "image_sha256": "a2c59718c1f732a5b4c35f67942a671d1a4845b0512b9b05162c6b1427625804"
+    }
+  },
+  "ui_benefit_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "benefit-title",
+      "tag_name": "h3",
+      "visibility_state": "visible",
+      "text": "Hire Quickly",
+      "data_testid": "benefit-title"
+    }
+  },
+  "ui_blockquote": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "blockquote",
+      "tag_name": "blockquote",
+      "visibility_state": "visible",
+      "data_testid": "blockquote",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fimage%2F10701757%2Ffile%2Foptimized%2Fauthor_logo_white-ca8e19c8bc8661174276cecc86450055.svg",
+      "image_sha256": "13b5fd503d2e2f9729ce78ec70620c152590308152493f19cc0d69c360da5141"
+    }
+  },
+  "ui_blog_card": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "blog-card",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "blog-card",
+      "role": "listitem",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fblog_post_page%2F4086839%2Fpreview_image%2Foptimized%2FCover-blog%25402x-0637e2fd1f858d68fcd04e85ba944d8f.png",
+      "image_sha256": "70947a4de91be65ff61547144af65c24949c43ac59ce2f6684e48a3ddcfef0fd"
+    }
+  },
+  "ui_blog_card_breadcrumbs": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "blog-card-breadcrumbs",
+      "tag_name": "nav",
+      "visibility_state": "visible",
+      "data_testid": "blog-card-breadcrumbs",
+      "aria_label": "laravel-api-tutorial-creating-and-testing-a-res-tful-api"
+    }
+  },
+  "ui_blog_card_link": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "blog-card-link",
+      "tag_name": "a",
+      "visibility_state": "visible",
+      "text": "Laravel API Tutorial: Creating and Testing a RESTful API",
+      "data_testid": "blog-card-link",
+      "href": "https://www.toptal.com/developers/laravel/restful-laravel-api-tutorial"
+    }
+  },
+  "ui_blog_section_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "blog-section-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Explore Trending Toptal Publications",
+      "data_testid": "blog-section-title"
+    }
+  },
+  "ui_burger_menu_button": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "burger-menu-button",
+      "tag_name": "button",
+      "visibility_state": "hidden",
+      "data_testid": "burger-menu-button",
+      "type": "button",
+      "aria_label": "menu"
+    }
+  },
+  "ui_client_script": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "client-script",
+      "tag_name": "script",
+      "visibility_state": "hidden",
+      "data_testid": "client-script"
+    }
+  },
+  "ui_client_testimonials_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "client-testimonials-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Our Clients\u2019 Satisfaction is Our Top Priority",
+      "data_testid": "client-testimonials-title"
+    }
+  },
+  "ui_clients_carousel": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "clients-carousel",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "clients-carousel"
+    }
+  },
+  "ui_clients_grid_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "clients-grid-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Why Organizations Choose Toptal",
+      "data_testid": "clients-grid-title"
+    }
+  },
+  "ui_close_icon": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "close-icon",
+      "tag_name": "svg",
+      "visibility_state": "visible",
+      "data_testid": "close-icon"
+    }
+  },
+  "ui_cover_image": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "cover-image",
+      "tag_name": "img",
+      "visibility_state": "visible",
+      "data_testid": "cover-image",
+      "src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fpartnership_section%2Fpartnership%2F11041071%2Fcover_image%2Foptimized%2F0511AttractingTopTalent-Cover-waldek_1280X600-9991ef7eb31bfab455c3825916f83f2a.png&width=768",
+      "image_sha256": "4f77c6560386524e14d0ca6527b02539611ea27f9e16ad515d92e04ee734efcc"
+    }
+  },
+  "ui_cover_image_link": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "cover-image-link",
+      "tag_name": "a",
+      "visibility_state": "visible",
+      "data_testid": "cover-image-link",
+      "href": "https://www.toptal.com/developers/laravel/restful-laravel-api-tutorial",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fblog_post_page%2F4086839%2Fpreview_image%2Foptimized%2FCover-blog%25402x-0637e2fd1f858d68fcd04e85ba944d8f.png",
+      "image_sha256": "70947a4de91be65ff61547144af65c24949c43ac59ce2f6684e48a3ddcfef0fd"
+    }
+  },
+  "ui_emblem": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "emblem",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "emblem"
+    }
+  },
+  "ui_feature_stepper_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "feature-stepper-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Hiring Made Easy",
+      "data_testid": "feature-stepper-title"
+    }
+  },
+  "ui_footer": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "footer",
+      "tag_name": "footer",
+      "visibility_state": "visible",
+      "data_testid": "footer",
+      "id": "footer",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fsocial_link%2F10925223%2Ficon_gray%2Foptimized%2FLinkedIn%2520light%2520grey-4b8af82a8fa937ba77e97a31e5534ed2.svg",
+      "image_sha256": "effb3fd805526e985f1809da30d1b25633d1c7890d4ac748576ef8330295da0a"
+    }
+  },
+  "ui_footer_column_links_list": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "footer-column-links-list",
+      "tag_name": "ul",
+      "visibility_state": "visible",
+      "data_testid": "footer-column-links-list"
+    }
+  },
+  "ui_footer_column_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "footer-column-title",
+      "tag_name": "p",
+      "visibility_state": "visible",
+      "text": "Hire Talent",
+      "data_testid": "footer-column-title"
+    }
+  },
+  "ui_hero_cta": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "hero-cta",
+      "tag_name": "a",
+      "visibility_state": "visible",
+      "text": "Hire Top Talent",
+      "data_testid": "hero-cta",
+      "href": "/hire"
+    }
+  },
+  "ui_hero_talent_name": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "hero-talent-name",
+      "tag_name": "p",
+      "visibility_state": "visible",
+      "text": "Jakub Rehor",
+      "data_testid": "hero-talent-name"
+    }
+  },
+  "ui_hero_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "hero-title",
+      "tag_name": "h1",
+      "visibility_state": "visible",
+      "text": "Hire the Top 3% of the World\u2019s Talent\u2122",
+      "data_testid": "hero-title"
+    }
+  },
+  "ui_hire_cta": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "hire-cta",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "hire-cta"
+    }
+  },
+  "ui_hire_cta_section": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "hire-cta-section",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "hire-cta-section"
+    }
+  },
+  "ui_hire_cta_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "hire-cta-title",
+      "tag_name": "p",
+      "visibility_state": "visible",
+      "text": "Top talent is in high demand.",
+      "data_testid": "hire-cta-title"
+    }
+  },
+  "ui_mobile_nav_item": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "mobile-nav-item",
+      "tag_name": "button",
+      "visibility_state": "hidden",
+      "text": "TalentHire Talent",
+      "data_testid": "mobile-nav-item",
+      "type": "button"
+    }
+  },
+  "ui_nav_container": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "nav-container",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "nav-container",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fwww.toptal.com%2Ftoptal-logo.png&width=360",
+      "image_sha256": "75ca91ab69c691aa9bb65aae631a24536c73dc4e7d2cc7d7a2336bed249e937b"
+    }
+  },
+  "ui_nav_cta": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "nav-cta",
+      "tag_name": "a",
+      "visibility_state": "hidden",
+      "text": "Hire Top Talent",
+      "data_testid": "nav-cta",
+      "id": "navbar-mobile-cta",
+      "href": "/hire"
+    }
+  },
+  "ui_overlay_outline": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "overlay-outline",
+      "tag_name": "div",
+      "visibility_state": "hidden",
+      "data_testid": "overlay-outline"
+    }
+  },
+  "ui_pagination": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "pagination",
+      "tag_name": "div",
+      "visibility_state": "hidden",
+      "data_testid": "pagination",
+      "role": "tablist",
+      "aria_label": "Slides"
+    }
+  },
+  "ui_partnership_section_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "partnership-section-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Collaborations With Leading Brands",
+      "data_testid": "partnership-section-title"
+    }
+  },
+  "ui_picture": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "picture",
+      "tag_name": "picture",
+      "visibility_state": "hidden",
+      "data_testid": "picture",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fimage%2F10778347%2Ffile%2Foptimized%2FJakub%2520Rehor-1038ffe84f90b1e0823e23ad61baa82c.png&width=360",
+      "image_sha256": "f1c592eeb17d3a377b6b6ecad880be98efe5c1855c46f893142c1564f543584d"
+    }
+  },
+  "ui_professional_services_section": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "professional-services-section",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "professional-services-section",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fhome_page%2Fcategories_and_practices_section%2Fcategory%2F10826878%2Finverted_icon%2Foptimized%2F01-Technology%2520Services%2520%25281%2529-125762cf16dc59b1f633079a42112922.svg",
+      "image_sha256": "917083f5a1965d65e127ebb178bbd7383112536db14384b904877195cc1645bb"
+    }
+  },
+  "ui_promo_banners_section": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "promo-banners-section",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "promo-banners-section",
+      "id": "topworker-banners",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fcompany_logo%2F10976513%2Fimage%2Foriginal%2Fnewsweekl-46e8d219827c1468c3e2cadb6c715f4b.svg",
+      "image_sha256": "443a2f198b170333aeac73dbc4de4e0c9013c4acc901afbf5afcad7162490a8c"
+    }
+  },
+  "ui_quote_text": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "quote-text",
+      "tag_name": "p",
+      "visibility_state": "visible",
+      "text": "We\u2019re known as a high-skilled marketplace, and we see an acute pain point within that area.",
+      "data_testid": "quote-text"
+    }
+  },
+  "ui_read_more_wrapper": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "read-more-wrapper",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "read-more-wrapper"
+    }
+  },
+  "ui_section_links_container": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "section-links-container",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "section-links-container"
+    }
+  },
+  "ui_services_tab": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "services-tab",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "services-tab",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fcompany_logo%2F11098862%2Fwhite_image%2Foptimized%2Fbridgestone-white-logo-2223d5ce6e8c6f056434c651bc193d1e.svg",
+      "image_sha256": "b4f8f0de44a0ca5cd6f8ef00146f1eb3c1589d08008ab97c7f3eaa93c5f46b59"
+    }
+  },
+  "ui_skill_categories_section": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "skill-categories-section",
+      "tag_name": "section",
+      "visibility_state": "visible",
+      "data_testid": "skill-categories-section"
+    }
+  },
+  "ui_skill_categories_section_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "skill-categories-section-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Discover Our Expert Skillsets",
+      "data_testid": "skill-categories-section-title"
+    }
+  },
+  "ui_skill_tag": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "skill-tag",
+      "tag_name": "a",
+      "visibility_state": "visible",
+      "text": "SQL",
+      "data_testid": "skill-tag",
+      "href": "https://www.toptal.com/developers/sql"
+    }
+  },
+  "ui_skip_links": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "skip-links",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "skip-links"
+    }
+  },
+  "ui_step_description": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "step-description",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "text": "An expert on our team will work with you to understand your goals, technical needs, and team dynamics.",
+      "data_testid": "step-description"
+    }
+  },
+  "ui_step_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "step-title",
+      "tag_name": "h3",
+      "visibility_state": "visible",
+      "text": "Talk to One of Our Industry Experts",
+      "data_testid": "step-title"
+    }
+  },
+  "ui_talent_card": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "talent-card",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "talent-card",
+      "role": "none",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fimage%2F10778347%2Ffile%2Foptimized%2FJakub%2520Rehor-1038ffe84f90b1e0823e23ad61baa82c.png&width=360",
+      "image_sha256": "f1c592eeb17d3a377b6b6ecad880be98efe5c1855c46f893142c1564f543584d"
+    }
+  },
+  "ui_talent_network_section": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "talent-network-section",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "talent-network-section",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fverticalized_talent_grid_section%2Fvertical%2Ftalent%2F10760210%2Favatar%2Foptimized%2FAdam%2520Ivansky_retouched-4f8361ec735514bf4fa53e0bb7466a6c.png&width=360",
+      "image_sha256": "a2c59718c1f732a5b4c35f67942a671d1a4845b0512b9b05162c6b1427625804"
+    }
+  },
+  "ui_talent_network_section_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "talent-network-section-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Meet Talent in Our Network",
+      "data_testid": "talent-network-section-title"
+    }
+  },
+  "ui_talent_tab": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "talent-tab",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "talent-tab",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fimage%2F10778348%2Ffile%2Foptimized%2FJakub%2520Rehor-57fa8d36201c5b17aa90c3166ffecc1b.png&width=1024",
+      "image_sha256": "b940384e6bc75afe2acdc06c3771a706d130365984a2bb675e0c94be1899149a"
+    }
+  },
+  "ui_talent_tabs": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "talent-tabs",
+      "tag_name": "ul",
+      "visibility_state": "visible",
+      "data_testid": "talent-tabs",
+      "role": "tablist",
+      "aria_label": "Meet Talent in Our Network"
+    }
+  },
+  "ui_talents_slide": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "talents-slide",
+      "tag_name": "section",
+      "visibility_state": "visible",
+      "data_testid": "talents-slide",
+      "aria_label": "Talents Carousel",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fverticalized_talent_grid_section%2Fvertical%2Ftalent%2F10760210%2Favatar%2Foptimized%2FAdam%2520Ivansky_retouched-4f8361ec735514bf4fa53e0bb7466a6c.png&width=360",
+      "image_sha256": "a2c59718c1f732a5b4c35f67942a671d1a4845b0512b9b05162c6b1427625804"
+    }
+  },
+  "ui_testimonial": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "testimonial",
+      "tag_name": "blockquote",
+      "visibility_state": "visible",
+      "data_testid": "testimonial",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Fcompany_logo%2F9412406%2Fdark_image%2Foptimized%2FBCG%2520X-28e1608067aa95bba7088c99d9b38371.svg",
+      "image_sha256": "b3a9ba5f0bf60c98eeeb6fa0046f48bcb31ac510f9fe3e39b085d83725afe6a7"
+    }
+  },
+  "ui_testimonials_text": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "testimonials-text",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "testimonials-text"
+    }
+  },
+  "ui_tooltip_trigger": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "tooltip-trigger",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "tooltip-trigger",
+      "role": "img",
+      "aria_label": "Verified Expert"
+    }
+  },
+  "ui_trustpilot_imf": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "trustpilot-imf",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "trustpilot-imf",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fbs-uploads.toptal.io%2Fblackfish-uploads%2Fcomponents%2Ftrustpilot_section%2Fstatistic%2F10666114%2Ficon%2Foptimized%2Fearth-planet-globe-b02d1b55afbe2ba3daf1c8b0a1525df1.svg",
+      "image_sha256": "412ead8b12ba5e776e0789db787a5c1fcbbf2bea2e04b6d0fd8ac5c488c9944a"
+    }
+  },
+  "ui_usp_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "usp-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Build Amazing Teams, On Demand",
+      "data_testid": "usp-title"
+    }
+  },
+  "ui_vertical_dropdown": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "vertical-dropdown",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "vertical-dropdown"
+    }
+  },
+  "ui_verticals_title": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "verticals-title",
+      "tag_name": "h2",
+      "visibility_state": "visible",
+      "text": "Leverage World-class Talent",
+      "data_testid": "verticals-title"
+    }
+  },
+  "ui_wordmark": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "wordmark",
+      "tag_name": "div",
+      "visibility_state": "visible",
+      "data_testid": "wordmark"
+    }
+  },
+  "ui_wordmarkpng": {
+    "ui_snapshot": {
+      "locator_attribute": "data-testid",
+      "locator_value": "wordmarkpng",
+      "tag_name": "div",
+      "visibility_state": "hidden",
+      "data_testid": "wordmarkpng",
+      "image_src": "https://assets.toptal.io/images?url=https%3A%2F%2Fwww.toptal.com%2Ftoptal-logo.png&width=360",
+      "image_sha256": "75ca91ab69c691aa9bb65aae631a24536c73dc4e7d2cc7d7a2336bed249e937b"
+    }
+  }
+}

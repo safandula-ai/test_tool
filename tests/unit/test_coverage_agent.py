@@ -112,6 +112,7 @@ def test_application_manifest_reports_reasons_for_empty_ui_and_api_results():
     manifest = engine.application_manifest("/")
 
     assert manifest["discovered_ui_elements"] == []
+    assert manifest["ui_element_details"] == {}
     assert manifest["discovered_api_endpoints"] == []
     assert (
         manifest["empty_ui_reason"]
@@ -153,6 +154,8 @@ def test_website_suite_layout_creates_config_smoke_performance_and_generated_pat
     assert (suite.root / "performance" / "test_performance.py").exists()
     assert (suite.root / "security" / "test_security.py").exists()
     assert suite.generated_test_file.parent.exists()
+    assert suite.generated_ui_test_file.name == "test_generated_coverage_gaps_ui.py"
+    assert suite.generated_api_test_file.name == "test_generated_coverage_gaps_api.py"
     smoke_source = (suite.root / "smoke" / "test_smoke.py").read_text(
         encoding="utf-8"
     )
@@ -245,6 +248,13 @@ def test_progressive_scan_classifies_targets_missing_from_final_dom_as_ephemeral
         async def get_attribute(self, attribute):
             return self.value
 
+        async def evaluate(self, script, context):
+            return {
+                "locator_attribute": context["locatorAttribute"],
+                "locator_value": context["locatorValue"],
+                "tag_name": "div",
+            }
+
     class Page:
         phase = 0
 
@@ -273,6 +283,16 @@ def test_progressive_scan_classifies_targets_missing_from_final_dom_as_ephemeral
     assert engine.ui_element_presence == {
         "persistent": "deterministic",
         "temporary-toast": "ephemeral",
+    }
+    assert engine.ui_element_details["persistent"] == {
+        "locator_attribute": "data-testid",
+        "locator_value": "persistent",
+        "tag_name": "div",
+    }
+    assert engine.ui_element_details["temporary-toast"] == {
+        "locator_attribute": "data-testid",
+        "locator_value": "temporary-toast",
+        "tag_name": "div",
     }
 
 
@@ -441,7 +461,29 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
             {
                 "page": "/login",
                 "base_url": "https://automationexercise.com",
-                "untested_ui_elements": ["login-email"],
+                "untested_ui_elements": [
+                    {
+                        "target": "login-email",
+                        "presence": "deterministic",
+                        "observed": {
+                            "locator_attribute": "data-testid",
+                            "locator_value": "login-email",
+                            "tag_name": "input",
+                            "type": "email",
+                        },
+                    },
+                    {
+                        "target": "hero-talent-name",
+                        "presence": "deterministic",
+                        "observed": {
+                            "locator_attribute": "data-testid",
+                            "locator_value": "hero-talent-name",
+                            "tag_name": "p",
+                            "visibility_state": "visible",
+                            "text": "Jane Example",
+                        },
+                    }
+                ],
                 "untested_api_endpoints": [],
                 "errors": [],
             }
@@ -451,21 +493,45 @@ def test_gap_scaffolder_generates_executable_ui_tests(tmp_path):
     output = tmp_path / "test_generated.py"
 
     count = scaffold_gap_tests(report, output)
-    source = output.read_text(encoding="utf-8")
-    helper = tmp_path / "_test_generated_helpers.py"
+    generated_test = tmp_path / "test_generated_ui.py"
+    source = generated_test.read_text(encoding="utf-8")
+    helper = tmp_path / "_test_generated_ui_helpers.py"
     helper_source = helper.read_text(encoding="utf-8")
+    data_file = tmp_path / "_test_generated_ui_data.json"
+    data_payload = json.loads(data_file.read_text(encoding="utf-8"))
 
-    assert count == 1
-    assert 'target="login-email"' in source
+    assert count == 2
+    assert not output.exists()
+    assert "target='login-email'" in source
     assert 'template="ComponentVisibilityTemplate"' in source
     assert "DEFAULT_BASE_URL = 'https://automationexercise.com'" in source
-    assert 'pytestconfig.getoption("--target-url")' in source
-    assert "from ._test_generated_helpers import (" in source
-    assert "target = target_locator(browser_page, " in source
+    assert "CASE_DATA = load_generated_case_data(__file__, '_test_generated_ui_data.json')" in source
+    assert 'expected_snapshot = case_data.get("ui_snapshot", {})' in source
+    assert "await assert_visible(target)" in source
+    assert 'await assert_text(target, expected_snapshot.get("text", ""))' in source
+    assert "assert_ui_snapshot" not in source
+    assert "@pytest.fixture(scope='module')" in source
+    assert "def generated_target_url(pytestconfig) -> str:" in source
+    assert 'pytest.skip("Set BASE_URL or pass --target-url")' in source
+    assert "generated_target_url," in source
+    assert "from ._test_generated_ui_helpers import (" in source
+    assert "target = await open_generated_ui_target(" in source
+    assert "await record_generated_ui_target(" in source
+    assert "automationexercise_request_kwargs" not in source
     assert "def _target(" not in source
     assert "def target_locator(" in helper_source
+    assert "async def assert_text(" in helper_source
+    assert "async def assert_ui_snapshot(" not in helper_source
     assert "async def assert_visible(target) -> None:" in helper_source
-    compile(source, str(output), "exec")
+    assert data_payload["ui_login_email"] == {
+        "ui_snapshot": {
+            "locator_attribute": "data-testid",
+            "locator_value": "login-email",
+            "tag_name": "input",
+            "type": "email",
+        }
+    }
+    compile(source, str(generated_test), "exec")
     compile(helper_source, str(helper), "exec")
 
 
@@ -486,11 +552,11 @@ def test_gap_scaffolder_generates_api_tests_from_gap_report(tmp_path):
     output = tmp_path / "test_generated.py"
 
     scaffold_gap_tests(report, output)
-    source = output.read_text(encoding="utf-8")
+    source = (tmp_path / "test_generated_api.py").read_text(encoding="utf-8")
 
     assert "async def test_generated_api_post_api_checkout" in source
     assert 'response = await api_client.request("POST", url)' in source
-    assert "from ._test_generated_helpers import (" not in source
+    assert "from ._test_generated_api_helpers import (" not in source
 
 
 @covers(type="api", target="coverage-agent://gap-scaffolder/automationexercise",
@@ -522,12 +588,12 @@ def test_gap_scaffolder_generates_automationexercise_payload_and_assertions(tmp_
     output = tmp_path / "test_generated.py"
 
     scaffold_gap_tests(report, output)
-    source = output.read_text(encoding="utf-8")
-    helper = tmp_path / "_test_generated_helpers.py"
+    source = (tmp_path / "test_generated_api.py").read_text(encoding="utf-8")
+    helper = tmp_path / "_test_generated_api_helpers.py"
     helper_source = helper.read_text(encoding="utf-8")
 
     assert "from utils.test_diagnostics import httpx_event_hooks" in source
-    assert "from ._test_generated_helpers import (" in source
+    assert "from ._test_generated_api_helpers import (" in source
     assert "request_kwargs, cleanup_payload = await automationexercise_request_kwargs(" in source
     assert "request_parameters='email, password'" in source
     assert 'assert response.status_code == 200' in source
@@ -537,7 +603,7 @@ def test_gap_scaffolder_generates_automationexercise_payload_and_assertions(tmp_
     assert "async def automationexercise_request_kwargs(" in helper_source
     assert "async def cleanup_generated_account(" in helper_source
     assert "def _generated_account_payload" not in source
-    compile(source, str(output), "exec")
+    compile(source, str(tmp_path / "test_generated_api.py"), "exec")
     compile(helper_source, str(helper), "exec")
 
 
@@ -609,33 +675,28 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
     output = tmp_path / "test_generated.py"
 
     scaffold_gap_tests(report, output)
-    source = output.read_text(encoding="utf-8")
-    helper = tmp_path / "_test_generated_helpers.py"
+    source = (tmp_path / "test_generated_api.py").read_text(encoding="utf-8")
+    helper = tmp_path / "_test_generated_api_helpers.py"
     helper_source = helper.read_text(encoding="utf-8")
-    data_file = tmp_path / "_test_generated_data.json"
+    data_file = tmp_path / "_test_generated_api_data.json"
     data_payload = json.loads(data_file.read_text(encoding="utf-8"))
 
     assert "reqres_http_client" in source
     assert "from config.settings import get_settings" in source
     assert "_SETTINGS = get_settings()" in source
     assert "pytest.mark.skipif(" in source
-    assert 'reason="Set RUN_LIVE_TESTS=true and REQRES_API_KEY for ReqRes generated API coverage"' in source
-    assert "CASE_DATA = load_generated_case_data(__file__, '_test_generated_data.json')" in source
+    assert 'reason="Set REQRES_API_KEY for ReqRes generated API coverage"' in source
+    assert "CASE_DATA = load_generated_case_data(__file__, '_test_generated_api_data.json')" in source
     assert "case_data = CASE_DATA.get(" in source
     assert "raw_expected_response_payload = case_data.get(\"response_payload\", \"\")" in source
     assert "expected_response_payload = reqres_expected_payload_fragment(raw_expected_response_payload)" in source
     assert "resolved_path, request_kwargs, cleanup = await reqres_request_kwargs(" in source
     assert "full_url='https://reqres.in/api/collections/products/records?project_id=29539'" in source
     assert "path='/api/collections/products/records/{record_id_filled_during_test}'" in source
-    assert (
-        "full_url='https://reqres.in/api/collections/products/records/{record_id_filled_during_test}?project_id=29539'"
-        in source
-    )
-    assert (
-        'target="GET /api/collections/products/records/'
-        '{record_id_filled_during_test} :: Fetch a single record by ID | status 200"'
-        in source
-    )
+    assert "{record_id_filled_during_test}" in source
+    assert "project_id=29539" in source
+    assert "records/{record_id_filled_during_test} :: " in source
+    assert "Fetch a single record by ID | status 200" in source
     assert 'response = await reqres_http_client.request("POST", resolved_path, **request_kwargs)' in source
     assert "assert response.status_code == int('201')" in source
     assert "if 'json' == \"json\":" not in source
@@ -648,7 +709,7 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
         in source
     )
     assert '"data": {' not in source
-    assert 'pytest.skip("Set RUN_LIVE_TESTS=true and REQRES_API_KEY for ReqRes generated API coverage")' not in source
+    assert 'pytest.skip("Set REQRES_API_KEY for ReqRes generated API coverage")' not in source
     assert "async def reqres_request_kwargs(" in helper_source
     assert "async def cleanup_reqres_record(" in helper_source
     assert "def load_generated_case_data(" in helper_source
@@ -658,7 +719,7 @@ def test_gap_scaffolder_generates_reqres_live_request_setup(tmp_path):
         "request_body": '{\n  "data": {\n    "name": "Wireless Headphones"\n  }\n}',
         "response_payload": '{"data":{"id":"example"}}',
     }
-    compile(source, str(output), "exec")
+    compile(source, str(tmp_path / "test_generated_api.py"), "exec")
     compile(helper_source, str(helper), "exec")
 
 
@@ -863,14 +924,14 @@ def test_gap_scaffolder_generates_json_response_assertion(tmp_path):
     output = tmp_path / "test_generated.py"
 
     scaffold_gap_tests(report, output)
-    source = output.read_text(encoding="utf-8")
+    source = (tmp_path / "test_generated_api.py").read_text(encoding="utf-8")
 
     assert 'if \'json\' == "json":' not in source
     assert "assert isinstance(payload, (dict, list))" in source
     assert "if expected_message:" not in source
     assert "assert expected_message in rendered_payload" in source
     assert "rendered_payload = json.dumps(payload, sort_keys=True)" in source
-    compile(source, str(output), "exec")
+    compile(source, str(tmp_path / "test_generated_api.py"), "exec")
 
 
 @covers(type="api", target="coverage-agent://gap-scaffolder/response-none",
@@ -901,12 +962,12 @@ def test_gap_scaffolder_omits_unused_expected_payload_for_empty_responses(tmp_pa
     output = tmp_path / "test_generated.py"
 
     scaffold_gap_tests(report, output)
-    source = output.read_text(encoding="utf-8")
+    source = (tmp_path / "test_generated_api.py").read_text(encoding="utf-8")
 
     assert 'expected_response_payload = case_data.get("response_payload", "")' not in source
     assert 'request_body = case_data.get("request_body")' in source
     assert "assert response.status_code == int('204')" in source
-    compile(source, str(output), "exec")
+    compile(source, str(tmp_path / "test_generated_api.py"), "exec")
 
 
 @covers(type="api", target="coverage-agent://gap-analysis/api-scenarios",

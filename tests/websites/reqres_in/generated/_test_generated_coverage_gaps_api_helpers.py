@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
 from urllib.parse import parse_qsl, urlsplit
 
 
@@ -152,7 +153,10 @@ async def cleanup_reqres_record(client, cleanup: dict[str, object] | None) -> No
         return
 
 
-def load_generated_case_data(module_file: str, file_name: str) -> dict[str, dict[str, str]]:
+def load_generated_case_data(
+    module_file: str,
+    file_name: str,
+) -> dict[str, dict[str, object]]:
     data_path = Path(module_file).with_name(file_name)
     if not data_path.is_file():
         return {}

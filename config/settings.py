@@ -33,7 +33,6 @@ class Settings:
     reqres_api_key: str | None
     sauce_username: str
     sauce_password: str
-    run_live_tests: bool
     update_visual_baselines: bool
     headless: bool
     slow_mo: int
@@ -69,7 +68,6 @@ def get_settings() -> Settings:
         reqres_api_key=os.getenv("REQRES_API_KEY") or None,
         sauce_username=os.getenv("SAUCE_USERNAME", "standard_user"),
         sauce_password=os.getenv("SAUCE_PASSWORD", "secret_sauce"),
-        run_live_tests=_bool("RUN_LIVE_TESTS", "false"),
         update_visual_baselines=_bool("UPDATE_VISUAL_BASELINES", "false"),
         headless=_bool("HEADLESS", "true"),
         slow_mo=int(os.getenv("SLOW_MO", "0")),

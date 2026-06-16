@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import httpx
 from playwright.async_api import Page, Request, TimeoutError as PlaywrightTimeoutError, async_playwright
 from playwright_stealth import Stealth
 
@@ -31,6 +33,7 @@ class PlaywrightDiscoveryEngine:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
         self.discovered_ui_elements: set[str] = set()
+        self.ui_element_details: dict[str, dict[str, object]] = {}
         self.discovered_api_endpoints: list[dict[str, str]] = []
         self.ui_element_presence: dict[str, str] = {}
         self.security_challenge_status = "not_detected"
@@ -129,6 +132,131 @@ class PlaywrightDiscoveryEngine:
         """Build a stable manifest page identifier for documentation-backed discovery."""
         return f"/documentation_sources/{Path(file_name).name}"
 
+    async def _fetch_asset_sha256(self, url: str) -> str | None:
+        """Fetch an asset and return a stable content hash."""
+        if not url.startswith(("http://", "https://")):
+            return None
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                timeout=self.settings.http_timeout,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+        except Exception:
+            return None
+        return hashlib.sha256(response.content).hexdigest()
+
+    async def _snapshot_ui_element(
+        self,
+        element,
+        *,
+        locator_attribute: str,
+        locator_value: str,
+    ) -> dict[str, object]:
+        """Capture a normalized UI snapshot for generated assertions."""
+        snapshot = await element.evaluate(
+            """(node, context) => {
+                const normalize = (value) =>
+                    String(value ?? "")
+                        .replace(/\\s+/g, " ")
+                        .trim();
+                const snapshot = {
+                    locator_attribute: context.locatorAttribute,
+                    locator_value: context.locatorValue,
+                    tag_name: normalize(node.tagName).toLowerCase(),
+                };
+                const style = window.getComputedStyle(node);
+                const rect = node.getBoundingClientRect();
+                const hiddenByStyle =
+                    style.display === "none" ||
+                    style.visibility === "hidden" ||
+                    style.visibility === "collapse" ||
+                    rect.width === 0 ||
+                    rect.height === 0;
+                snapshot.visibility_state = hiddenByStyle ? "hidden" : "visible";
+                const text = normalize(node.innerText || node.textContent || "");
+                const stableTextTags = new Set([
+                    "a",
+                    "button",
+                    "h1",
+                    "h2",
+                    "h3",
+                    "h4",
+                    "h5",
+                    "h6",
+                    "label",
+                    "p",
+                    "span",
+                ]);
+                if (
+                    text &&
+                    text.length <= 200 &&
+                    (stableTextTags.has(snapshot.tag_name) || node.childElementCount === 0)
+                ) {
+                    snapshot.text = text;
+                }
+                const value = "value" in node ? normalize(node.value) : "";
+                if (value) {
+                    snapshot.value = value;
+                }
+                for (const attributeName of context.attributeNames) {
+                    const attributeValue = normalize(node.getAttribute(attributeName));
+                    if (attributeValue) {
+                        snapshot[attributeName.replace(/-/g, "_")] = attributeValue;
+                    }
+                }
+                for (
+                    const attributeName of [
+                        "id",
+                        "name",
+                        "type",
+                        "placeholder",
+                        "role",
+                        "aria-label",
+                        "href",
+                        "src",
+                    ]
+                ) {
+                    const attributeValue = normalize(node.getAttribute(attributeName));
+                    if (attributeValue) {
+                        snapshot[attributeName.replace(/-/g, "_")] = attributeValue;
+                    }
+                }
+                const backgroundImage = style.backgroundImage || "";
+                const backgroundMatch = backgroundImage.match(/url\\((['"]?)(.*?)\\1\\)/);
+                if (backgroundMatch && backgroundMatch[2]) {
+                    snapshot.background_image_url = normalize(backgroundMatch[2]);
+                }
+                if (!snapshot.src) {
+                    const nestedImage = node.querySelector("img");
+                    const nestedImageSrc = normalize(
+                        nestedImage?.currentSrc || nestedImage?.getAttribute("src") || ""
+                    );
+                    if (nestedImageSrc) {
+                        snapshot.image_src = nestedImageSrc;
+                    }
+                }
+                return snapshot;
+            }""",
+            {
+                "locatorAttribute": locator_attribute,
+                "locatorValue": locator_value,
+                "attributeNames": list(TARGET_ATTRIBUTES),
+            },
+        )
+        asset_url = str(
+            snapshot.get("src")
+            or snapshot.get("image_src")
+            or snapshot.get("background_image_url")
+            or ""
+        ).strip()
+        if asset_url:
+            image_sha256 = await self._fetch_asset_sha256(asset_url)
+            if image_sha256:
+                snapshot["image_sha256"] = image_sha256
+        return snapshot
+
     async def harvest_ui_elements(self, page: Page) -> set[str]:
         """Collect all currently attached stable target attributes."""
         current: set[str] = set()
@@ -140,6 +268,15 @@ class PlaywrightDiscoveryEngine:
                     continue
                 if value:
                     current.add(value)
+                    if value not in self.ui_element_details:
+                        try:
+                            self.ui_element_details[value] = await self._snapshot_ui_element(
+                                element,
+                                locator_attribute=attribute,
+                                locator_value=value,
+                            )
+                        except Exception:
+                            continue
         self.discovered_ui_elements.update(current)
         return current
 
@@ -272,6 +409,7 @@ class PlaywrightDiscoveryEngine:
         content = source_path.read_text(encoding="utf-8")
         self.discovered_api_endpoints = await self.scraper.scrape_content(content)
         self.discovered_ui_elements.clear()
+        self.ui_element_details = {}
         self.ui_element_presence = {}
         self.security_challenge_status = "not_detected"
         self.security_challenge_selector = None
@@ -330,6 +468,11 @@ class PlaywrightDiscoveryEngine:
             "ui_element_presence": {
                 target: self.ui_element_presence.get(target, "deterministic")
                 for target in sorted(self.discovered_ui_elements)
+            },
+            "ui_element_details": {
+                target: self.ui_element_details[target]
+                for target in sorted(self.discovered_ui_elements)
+                if target in self.ui_element_details
             },
             "discovered_api_endpoints": sorted(
                 unique_endpoints,

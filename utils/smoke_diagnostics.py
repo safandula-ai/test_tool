@@ -1,4 +1,4 @@
-"""Visible terminal and Allure diagnostics for website smoke checks."""
+"""Visible terminal diagnostics for website smoke checks."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def emit_smoke_diagnostics(
     headers: Mapping[str, str],
     details: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Print a smoke result despite capture and attach the same JSON to Allure."""
+    """Print a smoke result despite output capture."""
     payload: dict[str, Any] = {
         "check": check,
         "method": method,
@@ -59,14 +59,4 @@ def emit_smoke_diagnostics(
     if terminal is not None:
         terminal.write_line(f"SMOKE DIAGNOSTICS\n{rendered}")
 
-    try:
-        import allure
-
-        allure.attach(
-            rendered,
-            name=f"smoke-{check}",
-            attachment_type=allure.attachment_type.JSON,
-        )
-    except (ImportError, RuntimeError):
-        pass
     return payload

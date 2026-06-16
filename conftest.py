@@ -4,6 +4,7 @@ import os
 import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncContextManager
 
 import httpx
@@ -11,11 +12,15 @@ import pytest
 import pytest_asyncio
 from faker import Faker
 from playwright.async_api import Page, async_playwright
+from playwright_stealth import Stealth
 
 from config.settings import Settings, get_settings
 from utils.api_mocks import build_transport
-from utils.allure_report import generate_allure_report
 from utils.logging import get_logger, start_test_log_capture, stop_test_log_capture
+from utils.pytest_html_report import (
+    PytestHtmlReportResult,
+    prepare_pytest_html_report,
+)
 from utils.smoke_diagnostics import sanitize_headers
 from utils.test_diagnostics import (
     TestDiagnosticRecorder,
@@ -35,15 +40,21 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Override BASE_URL for smoke, performance, and generated website tests",
     )
     parser.addoption(
-        "--no-allure-report",
+        "--no-html-report",
         action="store_true",
-        help="Collect Allure results but skip automatic HTML report generation",
+        help="Skip automatic pytest-html report generation",
     )
     parser.addoption(
-        "--allure-report-dir",
-        dest="generated_allure_report_dir",
-        default="allure-report",
-        help="Archive directory for timestamped Allure HTML reports and history",
+        "--html-report-dir",
+        dest="generated_html_report_dir",
+        default="reports/pytest-html",
+        help="Archive directory for timestamped pytest-html reports",
+    )
+    parser.addoption(
+        "--html-report-name",
+        dest="generated_html_report_name",
+        default=None,
+        help="Optional file name prefix for the generated pytest-html report",
     )
 
 
@@ -53,24 +64,51 @@ def settings() -> Settings:
     return get_settings()
 
 
+def _html_report_required() -> bool:
+    """Return whether missing pytest-html output should fail the session."""
+    return os.getenv("HTML_REPORT_REQUIRED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Configure a timestamped self-contained pytest-html report when available."""
+    if config.getoption("--no-html-report"):
+        result = PytestHtmlReportResult(
+            "disabled",
+            "pytest-html report generation disabled by --no-html-report.",
+        )
+    elif not config.pluginmanager.hasplugin("html"):
+        result = PytestHtmlReportResult(
+            "plugin_missing",
+            "pytest-html plugin is not installed; HTML report was not generated.",
+        )
+    else:
+        htmlpath = getattr(config.option, "htmlpath", None)
+        if htmlpath:
+            result = PytestHtmlReportResult(
+                "configured",
+                f"pytest-html report will be written to {htmlpath}.",
+                report_path=Path(htmlpath).resolve(),
+            )
+        else:
+            result = prepare_pytest_html_report(
+                config.getoption("generated_html_report_dir"),
+                report_name=config.getoption("generated_html_report_name"),
+            )
+            config.option.htmlpath = str(result.report_path)
+        config.option.self_contained_html = True
+    setattr(config, "_pytest_html_report_result", result)
+
+
 @pytest.fixture(scope="session")
 def target_url(pytestconfig: pytest.Config, settings: Settings) -> str:
     """Resolve a terminal URL override, falling back to BASE_URL."""
     value = pytestconfig.getoption("--target-url") or settings.base_url
     return value.rstrip("/")
-
-
-@pytest.fixture(scope="session")
-def live_target_enabled(pytestconfig: pytest.Config, settings: Settings) -> bool:
-    """Allow explicit terminal targets even when global live tests are disabled."""
-    return settings.run_live_tests or bool(pytestconfig.getoption("--target-url"))
-
-
-@pytest.fixture
-def require_live_target_enabled(live_target_enabled: bool) -> None:
-    """Skip tests that require a live target unless one is explicitly enabled."""
-    if not live_target_enabled:
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
 
 
 @pytest.fixture(autouse=True)
@@ -146,20 +184,46 @@ def page_factory(
     request: pytest.FixtureRequest,
     settings: Settings,
     test_diagnostics: TestDiagnosticRecorder,
-) -> Callable[[str | None], AsyncContextManager[Page]]:
+) -> Callable[..., AsyncContextManager[Page]]:
     """Build isolated async Playwright pages without async pytest fixtures."""
 
     @asynccontextmanager
-    async def create_page(base_url: str | None = None) -> AsyncIterator[Page]:
+    async def create_page(
+        base_url: str | None = None,
+        *,
+        viewport: dict[str, int] | None = None,
+        is_mobile: bool | None = None,
+        has_touch: bool | None = None,
+        user_agent: str | None = None,
+    ) -> AsyncIterator[Page]:
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(
                 headless=settings.headless,
                 slow_mo=settings.slow_mo,
+                args=["--disable-blink-features=AutomationControlled"],
             )
-            context = await browser.new_context(
-                base_url=base_url or settings.base_url,
-                record_video_dir=str(settings.video_dir) if settings.video_on_failure else None,
-            )
+            context_options: dict[str, object] = {
+                "base_url": base_url or settings.base_url,
+                "locale": "en-US",
+                "user_agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+                ),
+                "viewport": {"width": 1280, "height": 720},
+                "color_scheme": "light",
+                "extra_http_headers": {"Accept-Language": "en-US,en;q=0.9"},
+                "record_video_dir": str(settings.video_dir) if settings.video_on_failure else None,
+            }
+            if viewport is not None:
+                context_options["viewport"] = viewport
+            if is_mobile is not None:
+                context_options["is_mobile"] = is_mobile
+            if has_touch is not None:
+                context_options["has_touch"] = has_touch
+            if user_agent is not None:
+                context_options["user_agent"] = user_agent
+            context = await browser.new_context(**context_options)
+            await Stealth().apply_stealth_async(context)
             if settings.trace_on_failure:
                 await context.tracing.start(screenshots=True, snapshots=True, sources=True)
 
@@ -272,23 +336,17 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Generate the persistent Allure report after result writers finish."""
-    if session.config.getoption("--no-allure-report"):
-        return
-
-    results_dir = session.config.getoption("allure_report_dir") or "allure-results"
-    report_dir = session.config.getoption("generated_allure_report_dir")
-    result = generate_allure_report(results_dir, report_dir)
+    """Report the configured pytest-html output and optionally require it."""
+    result = getattr(
+        session.config,
+        "_pytest_html_report_result",
+        PytestHtmlReportResult("unknown", "pytest-html report status is unavailable."),
+    )
     terminal = session.config.pluginmanager.get_plugin("terminalreporter")
     if terminal is not None:
-        prefix = "ALLURE" if result.succeeded else "ALLURE WARNING"
+        prefix = "HTML" if result.succeeded else "HTML WARNING"
         terminal.write_line(f"{prefix}: {result.message}")
 
-    required = os.getenv("ALLURE_REPORT_REQUIRED", "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    required = _html_report_required()
     if required and not result.succeeded and exitstatus == pytest.ExitCode.OK:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED

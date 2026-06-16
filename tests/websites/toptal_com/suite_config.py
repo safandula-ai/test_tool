@@ -2,6 +2,12 @@
 
 BASE_URL = "https://www.toptal.com"
 SUITE_NAME = "toptal_com"
+MOBILE_VIEWPORT = {"width": 390, "height": 844}
+MOBILE_USER_AGENT = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 "
+    "Mobile/15E148 Safari/604.1"
+)
 SMOKE_HEALTH_PATH = "/"
 SMOKE_HEALTH_STATUS = 200
 SMOKE_ROOT_PATH = "/"

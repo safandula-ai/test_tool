@@ -13,7 +13,7 @@ import pytest
 from coverage_agent.decorators import covers
 
 
-DEFAULT_BASE_URL = os.getenv("BASE_URL", "https://example.test")
+DEFAULT_BASE_URL = os.getenv("BASE_URL") or None
 SECURITY_SEARCH_PATH = os.getenv("ONE_SHOT_SECURITY_SEARCH_PATH", "/")
 SECURITY_SEARCH_INPUT_SELECTOR = os.getenv(
     "ONE_SHOT_SECURITY_SEARCH_INPUT_SELECTOR",
@@ -31,12 +31,13 @@ SECURITY_CONSENT_ACCEPT_SELECTOR = os.getenv(
 
 
 def _target_url(pytestconfig):
-    return (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL).rstrip("/")
+    target_url = pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL
+    return target_url.rstrip("/")
 
 
-def _require_live_target(pytestconfig, settings):
-    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+def _require_live_target(pytestconfig):
+    if not (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL):
+        pytest.skip("Set BASE_URL or pass --target-url")
 
 
 async def _dismiss_consent_if_present(page) -> None:
@@ -77,10 +78,9 @@ async def _dismiss_consent_if_present(page) -> None:
 async def test_search_rejects_reflected_xss_payload(
     page_factory,
     pytestconfig,
-    settings,
     test_diagnostics,
 ):
-    _require_live_target(pytestconfig, settings)
+    _require_live_target(pytestconfig)
     base_url = _target_url(pytestconfig)
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
 
@@ -133,10 +133,9 @@ async def test_search_rejects_reflected_xss_payload(
 async def test_http_security_defense_headers(
     page_factory,
     pytestconfig,
-    settings,
     test_diagnostics,
 ):
-    _require_live_target(pytestconfig, settings)
+    _require_live_target(pytestconfig)
     base_url = _target_url(pytestconfig)
     required_headers = {
         "strict-transport-security": "HSTS protocol enforcement",

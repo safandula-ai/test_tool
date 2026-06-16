@@ -14,6 +14,7 @@ _TEST_LOG_BUFFER: ContextVar[list[str] | None] = ContextVar(
 
 
 def _capture_test_log(message) -> None:
+    """Append loguru output to the active per-test in-memory buffer."""
     buffer = _TEST_LOG_BUFFER.get()
     if buffer is None:
         return
@@ -21,16 +22,19 @@ def _capture_test_log(message) -> None:
 
 
 def start_test_log_capture() -> tuple[list[str], Token[list[str] | None]]:
+    """Start collecting log lines for the currently running pytest item."""
     buffer: list[str] = []
     token = _TEST_LOG_BUFFER.set(buffer)
     return buffer, token
 
 
 def stop_test_log_capture(token: Token[list[str] | None]) -> None:
+    """Restore the previous log-capture context after a test finishes."""
     _TEST_LOG_BUFFER.reset(token)
 
 
 def get_logger(level: str = "INFO", log_file: str | Path = "logs/framework.log"):
+    """Configure stdout, file, and per-test loguru sinks for the framework."""
     path = Path(log_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     logger.remove()

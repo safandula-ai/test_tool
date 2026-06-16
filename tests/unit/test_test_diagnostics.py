@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import sys
-import types
-
 import httpx
 import pytest
 
@@ -67,9 +64,7 @@ async def test_httpx_diagnostics_capture_form_request_payload():
     assert response_event["payload"] == {"responseCode": 200, "message": "ok"}
 
 
-def test_emit_test_diagnostics_adds_report_sections_and_allure_attachments(
-    monkeypatch: pytest.MonkeyPatch,
-):
+def test_emit_test_diagnostics_writes_terminal_output():
     recorder = TestDiagnosticRecorder("tests/unit/test_example.py::test_case")
     recorder.log_lines.extend(
         [
@@ -77,15 +72,6 @@ def test_emit_test_diagnostics_adds_report_sections_and_allure_attachments(
             "2026-06-15 15:00:01 | ERROR | second message",
         ]
     )
-    attached: list[tuple[str, str, str]] = []
-
-    allure_stub = types.SimpleNamespace(
-        attachment_type=types.SimpleNamespace(JSON="json", TEXT="text"),
-        attach=lambda body, name, attachment_type: attached.append(
-            (name, body, attachment_type)
-        ),
-    )
-    monkeypatch.setitem(sys.modules, "allure", allure_stub)
 
     terminal_lines: list[str] = []
 
@@ -116,15 +102,8 @@ def test_emit_test_diagnostics_adds_report_sections_and_allure_attachments(
     payload = emit_test_diagnostics(Config(), FakeItem(), recorder)
 
     assert payload["outcome"] == "passed"
-    assert attached[0][0] == "test-diagnostics"
-    assert '"test": "tests/unit/test_example.py::test_case"' in attached[0][1]
-    assert attached[1] == (
-        "test-log",
-        "2026-06-15 15:00:00 | INFO | first message\n"
-        "2026-06-15 15:00:01 | ERROR | second message",
-        "text",
-    )
     assert terminal_lines
+    assert '"test": "tests/unit/test_example.py::test_case"' in terminal_lines[0]
 
 
 def test_append_report_diagnostics_uses_native_pytest_capture_sections():

@@ -17,7 +17,7 @@ from coverage_agent.decorators import covers
 from utils.smoke_diagnostics import emit_smoke_diagnostics
 
 
-DEFAULT_BASE_URL = os.getenv("BASE_URL", "https://example.test")
+DEFAULT_BASE_URL = os.getenv("BASE_URL") or None
 SMOKE_HEALTH_PATH = os.getenv("ONE_SHOT_SMOKE_HEALTH_PATH", "/")
 SMOKE_HEALTH_STATUS = int(os.getenv("ONE_SHOT_SMOKE_HEALTH_STATUS", "200"))
 SMOKE_ROOT_PATH = os.getenv("ONE_SHOT_SMOKE_ROOT_PATH", "/")
@@ -27,12 +27,13 @@ SMOKE_RENDER_TIMEOUT_MS = int(os.getenv("ONE_SHOT_SMOKE_RENDER_TIMEOUT_MS", "800
 
 
 def _target_url(pytestconfig):
-    return (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL).rstrip("/")
+    target_url = pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL
+    return target_url.rstrip("/")
 
 
-def _require_live_target(pytestconfig, settings):
-    if not settings.run_live_tests and not pytestconfig.getoption("--target-url"):
-        pytest.skip("Set RUN_LIVE_TESTS=true or pass --target-url")
+def _require_live_target(pytestconfig):
+    if not (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL):
+        pytest.skip("Set BASE_URL or pass --target-url")
 
 
 @pytest.mark.smoke
@@ -46,8 +47,8 @@ def _require_live_target(pytestconfig, settings):
     presence="deterministic",
     template="APIContractTemplate",
 )
-async def test_backend_gateway_health(pytestconfig, settings):
-    _require_live_target(pytestconfig, settings)
+async def test_backend_gateway_health(pytestconfig):
+    _require_live_target(pytestconfig)
     base_url = _target_url(pytestconfig)
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
@@ -91,8 +92,8 @@ async def test_backend_gateway_health(pytestconfig, settings):
     presence="deterministic",
     template="ComponentVisibilityTemplate",
 )
-async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
-    _require_live_target(pytestconfig, settings)
+async def test_homepage_shell_renders(page_factory, pytestconfig):
+    _require_live_target(pytestconfig)
     base_url = _target_url(pytestconfig)
     async with page_factory(base_url) as page:
         started = perf_counter()

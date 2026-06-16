@@ -24,6 +24,7 @@ _REQRES_STATUS_PATTERN = re.compile(r">(\d{3})\s+[A-Z]+<")
 
 
 def _clean_code_block(fragment: str) -> str:
+    """Strip syntax-highlighting markup and decode a documentation code block."""
     normalized = re.sub(r"</span>\s*<span[^>]*class=\"line\"[^>]*>", "\n", fragment)
     normalized = re.sub(r"<br\s*/?>", "\n", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"<[^>]+>", "", normalized)
@@ -33,6 +34,7 @@ def _clean_code_block(fragment: str) -> str:
 
 
 def _request_body_from_segment(segment: str) -> str | None:
+    """Extract a JSON request body example from one endpoint card segment."""
     match = re.search(
         r"Request body.*?<pre[^>]*><code>(?P<body>.*?)</code></pre>",
         segment,
@@ -45,6 +47,7 @@ def _request_body_from_segment(segment: str) -> str | None:
 
 
 def _curl_from_segment(segment: str) -> str | None:
+    """Extract the curl example and replace the live API key with an env placeholder."""
     for match in re.finditer(r"<pre[^>]*><code>(?P<code>.*?)</code></pre>", segment, re.DOTALL):
         cleaned = _clean_code_block(match.group("code"))
         if cleaned.startswith("curl "):
@@ -53,6 +56,7 @@ def _curl_from_segment(segment: str) -> str | None:
 
 
 def _response_code_from_segment(segment: str) -> str | None:
+    """Extract the documented HTTP status code from one endpoint segment."""
     match = _REQRES_STATUS_PATTERN.search(segment)
     if not match:
         return None
@@ -60,6 +64,7 @@ def _response_code_from_segment(segment: str) -> str | None:
 
 
 def _response_payload_from_segment(segment: str) -> tuple[str | None, str | None]:
+    """Extract the documented response body and classify its payload kind."""
     status_match = _REQRES_STATUS_PATTERN.search(segment)
     if not status_match:
         return None, None
@@ -81,6 +86,7 @@ def _response_payload_from_segment(segment: str) -> tuple[str | None, str | None
 
 
 def _request_parameters(url: str, request_body: str | None) -> str | None:
+    """Infer request parameter names from query params and top-level JSON keys."""
     parameters: list[str] = []
     parsed = urlsplit(url)
     for key, _ in parse_qsl(parsed.query, keep_blank_values=True):

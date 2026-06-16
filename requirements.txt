@@ -12,7 +12,7 @@ jsonschema>=4.22.0
 python-dotenv>=1.0.0
 
 # Reporting, logging, and dynamic test-data generation.
-allure-pytest>=2.13.0
+pytest-html>=4.1.1
 loguru>=0.7.2
 faker>=25.0.0
 

@@ -18,6 +18,7 @@ from coverage_agent.template_engine import DynamicSuiteAssembler
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for discovery, analysis, selection, and scaffolding."""
     parser = argparse.ArgumentParser(prog="python -m coverage_agent")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -69,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def _discover(args: argparse.Namespace) -> dict[str, object]:
+    """Run browser or documentation-based discovery and persist the application map."""
     if not args.base_url:
         raise ValueError("Provide --base-url or set BASE_URL")
     suite = ensure_website_suite(args.base_url)
@@ -96,6 +98,7 @@ async def _discover(args: argparse.Namespace) -> dict[str, object]:
 
 
 def main() -> int:
+    """Dispatch the selected coverage-agent CLI command."""
     args = build_parser().parse_args()
     if args.command == "analyze":
         coverage = generate_coverage_map(args.tests, args.output)
