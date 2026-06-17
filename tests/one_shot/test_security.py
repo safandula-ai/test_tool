@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from coverage_agent.decorators import covers
+from tests.one_shot.helpers import require_live_target, target_url
 from tests.one_shot.suite_config import (
     BASE_URL,
     SECURITY_CONSENT_ACCEPT_SELECTOR,
@@ -18,16 +19,6 @@ from tests.one_shot.suite_config import (
     SECURITY_SEARCH_SUBMIT_SELECTOR,
     SUITE_NAME,
 )
-
-
-def _target_url(pytestconfig):
-    target_url = pytestconfig.getoption("--target-url") or BASE_URL
-    return target_url.rstrip("/")
-
-
-def _require_live_target(pytestconfig):
-    if not (pytestconfig.getoption("--target-url") or BASE_URL):
-        pytest.skip("Set BASE_URL or pass --target-url")
 
 
 async def _dismiss_consent_if_present(page, test_diagnostics) -> None:
@@ -88,8 +79,8 @@ async def test_search_rejects_reflected_xss_payload(
     pytestconfig,
     test_diagnostics,
 ):
-    _require_live_target(pytestconfig)
-    base_url = _target_url(pytestconfig)
+    require_live_target(pytestconfig, default_base_url=BASE_URL)
+    base_url = target_url(pytestconfig, default_base_url=BASE_URL)
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
     test_diagnostics.record(
         "test_surface",
@@ -175,8 +166,8 @@ async def test_http_security_defense_headers(
     pytestconfig,
     test_diagnostics,
 ):
-    _require_live_target(pytestconfig)
-    base_url = _target_url(pytestconfig)
+    require_live_target(pytestconfig, default_base_url=BASE_URL)
+    base_url = target_url(pytestconfig, default_base_url=BASE_URL)
     required_headers = {
         "strict-transport-security": "HSTS protocol enforcement",
         "x-frame-options": "clickjacking mitigation",

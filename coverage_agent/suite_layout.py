@@ -618,6 +618,7 @@ def ensure_website_suite(
         for marker in (
             "Generic availability smoke test",
             "Critical availability smoke tests for this website suite.",
+            "from tests.websites.helpers import require_live_target, resolve_target_url",
         )
     ):
         smoke_file.write_text(render_smoke_test_source(name), encoding="utf-8")

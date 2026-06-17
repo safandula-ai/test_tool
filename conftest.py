@@ -59,6 +59,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="Optional file name prefix for the generated pytest-html report",
     )
+    parser.addoption(
+        "--quiet-diagnostics",
+        action="store_true",
+        default=False,
+        help="Suppress custom TEST DIAGNOSTICS blocks in the terminal while keeping HTML/report sections.",
+    )
 
 
 @pytest.fixture(scope="session")
@@ -160,6 +166,18 @@ def _visible_report(item: pytest.Item):
     return None
 
 
+def _terminal_diagnostics_enabled(config: pytest.Config) -> bool:
+    """Return whether custom diagnostics should be written to the terminal."""
+    if config.getoption("--quiet-diagnostics"):
+        return False
+    return os.getenv("TERMINAL_DIAGNOSTICS", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _publish_terminal_diagnostics(
     config: pytest.Config,
     item: pytest.Item,
@@ -167,6 +185,8 @@ def _publish_terminal_diagnostics(
 ) -> None:
     """Write one diagnostics block to the terminal path best suited to the runner."""
     if getattr(item, "_call_phase_diagnostics_written", False):
+        return
+    if not _terminal_diagnostics_enabled(config):
         return
     terminal = config.pluginmanager.get_plugin("terminalreporter")
     prefers_terminalreporter = bool(

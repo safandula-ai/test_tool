@@ -14,6 +14,7 @@ import pytest
 from playwright.async_api import expect
 
 from coverage_agent.decorators import covers
+from tests.one_shot.helpers import require_live_target, target_url
 from tests.one_shot.suite_config import (
     BASE_URL,
     PERF_HOME_PATH,
@@ -43,19 +44,9 @@ from tests.websites.performance_helpers import (
 from utils.test_diagnostics import httpx_event_hooks
 
 
-def _target_url(pytestconfig):
-    target_url = pytestconfig.getoption("--target-url") or BASE_URL
-    return target_url.rstrip("/")
-
-
-def _require_live_target(pytestconfig):
-    if not (pytestconfig.getoption("--target-url") or BASE_URL):
-        pytest.skip("Set BASE_URL or pass --target-url")
-
-
 @pytest.fixture
 def require_live_target_enabled(pytestconfig):
-    _require_live_target(pytestconfig)
+    require_live_target(pytestconfig, default_base_url=BASE_URL)
 
 
 pytestmark = pytest.mark.usefixtures("require_live_target_enabled")
@@ -116,7 +107,7 @@ async def test_homepage_navigation_performance_metrics(
     settings,
     test_diagnostics,
 ):
-    base_url = _target_url(pytestconfig)
+    base_url = target_url(pytestconfig, default_base_url=BASE_URL)
     warmup_runs, sample_count = performance_sample_plan(
         warmup_runs=PERFORMANCE_WARMUP_RUNS,
         sample_count=PERFORMANCE_SAMPLE_COUNT,
@@ -167,7 +158,7 @@ async def test_route_renders_under_mobile_throttling(
     settings,
     test_diagnostics,
 ):
-    base_url = _target_url(pytestconfig)
+    base_url = target_url(pytestconfig, default_base_url=BASE_URL)
     warmup_runs, sample_count = performance_sample_plan(
         warmup_runs=PERFORMANCE_WARMUP_RUNS,
         sample_count=PERFORMANCE_SAMPLE_COUNT,

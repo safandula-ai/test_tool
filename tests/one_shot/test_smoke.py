@@ -13,6 +13,7 @@ import pytest
 from playwright.async_api import async_playwright, expect
 
 from coverage_agent.decorators import covers
+from tests.one_shot.helpers import require_live_target, target_url
 from tests.one_shot.suite_config import (
     BASE_URL,
     SMOKE_HEALTH_PATH,
@@ -23,16 +24,6 @@ from tests.one_shot.suite_config import (
     SMOKE_ROOT_SELECTOR,
 )
 from utils.smoke_diagnostics import emit_smoke_diagnostics
-
-
-def _target_url(pytestconfig):
-    target_url = pytestconfig.getoption("--target-url") or BASE_URL
-    return target_url.rstrip("/")
-
-
-def _require_live_target(pytestconfig):
-    if not (pytestconfig.getoption("--target-url") or BASE_URL):
-        pytest.skip("Set BASE_URL or pass --target-url")
 
 
 @pytest.mark.smoke
@@ -47,8 +38,8 @@ def _require_live_target(pytestconfig):
     template="APIContractTemplate",
 )
 async def test_backend_gateway_health(pytestconfig):
-    _require_live_target(pytestconfig)
-    base_url = _target_url(pytestconfig)
+    require_live_target(pytestconfig, default_base_url=BASE_URL)
+    base_url = target_url(pytestconfig, default_base_url=BASE_URL)
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
         try:
@@ -92,8 +83,8 @@ async def test_backend_gateway_health(pytestconfig):
     template="ComponentVisibilityTemplate",
 )
 async def test_homepage_shell_renders(page_factory, pytestconfig):
-    _require_live_target(pytestconfig)
-    base_url = _target_url(pytestconfig)
+    require_live_target(pytestconfig, default_base_url=BASE_URL)
+    base_url = target_url(pytestconfig, default_base_url=BASE_URL)
     async with page_factory(base_url) as page:
         started = perf_counter()
         response = await page.goto(

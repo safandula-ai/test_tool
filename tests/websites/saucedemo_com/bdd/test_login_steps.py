@@ -1,3 +1,5 @@
+"""Live SauceDemo BDD login scenario."""
+
 from __future__ import annotations
 
 import pytest

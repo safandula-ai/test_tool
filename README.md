@@ -44,7 +44,7 @@ Adjust target URLs and credentials in `.env` after copying the example file.
 The framework reads configuration from environment variables and `.env` files.
 
 - `ENV`: `local`, `staging`, or `prod`
-- `BASE_URL`: default UI target base URL, also used by the reusable `tests/one_shot` templates unless `--target-url` is passed
+- `BASE_URL`: default UI target base URL, used by the reusable `tests/one_shot` templates unless `--target-url` is passed
 - `PERFORMANCE_MAX_RESPONSE_MS`: generic performance threshold, default `5000`
 - `PERFORMANCE_MAX_TTFB_MS`: homepage time-to-first-byte threshold for browser performance checks, default `800`
 - `PERFORMANCE_MAX_LOAD_MS`: homepage full-load threshold for browser performance checks, default `3000`
@@ -59,6 +59,7 @@ The framework reads configuration from environment variables and `.env` files.
 - `API_BASE_URL`: API target base URL
 - `HEADLESS`: run browser headless when `true`
 - `HTML_REPORT_REQUIRED`: fail an otherwise successful run when pytest-html output is unavailable
+- `TERMINAL_DIAGNOSTICS`: print custom `TEST DIAGNOSTICS` blocks to the terminal, default `true`
 - `TRACE_ON_FAILURE`: enable trace capture for failed UI tests
 - `REQRES_API_KEY`: required by ReqRes for live API requests
 - `UPDATE_VISUAL_BASELINES`: create or replace visual regression baselines
@@ -354,33 +355,12 @@ tests/websites/
 ```
 
 Every website package has `suite_config.py` and consistent `api/`, `ui/`,
-`smoke/`, `performance/`, `security/`, and `generated/` directories. Per-site
-paths, selectors, and base URLs live in `suite_config.py`.
-Shared runtime helpers such as target resolution, live-target gating, and
-consent dismissal live in `tests/websites/helpers.py`.
-
-Generic website tests use `--target-url` first. If it is omitted, each suite
-falls back to the configured base URL from `suite_config.py`.
-
-Override the target directly from the terminal:
-
-Windows PowerShell:
-
-```powershell
-pytest tests/websites/reqres_in/smoke --target-url https://reqres.in
-pytest tests/websites/automationexercise_com/performance `
-  --target-url https://automationexercise.com
-```
-
-Linux:
-
-```bash
-pytest tests/websites/reqres_in/smoke --target-url https://reqres.in
-pytest tests/websites/automationexercise_com/performance \
-  --target-url https://automationexercise.com
-```
-
-Passing `--target-url` overrides the suite's configured `BASE_URL`.
+`smoke/`, `performance/`, `security/`, and `generated/` directories.
+Generated suites use the `BASE_URL` defined in their own `suite_config.py`.
+That keeps each suite bound to one target instead of allowing ad hoc runtime
+overrides. Shared generic consent helpers live in `tests/websites/helpers.py`,
+and site-specific helper modules may be added when a provider needs custom
+behavior, as with Sabre's OneTrust handling.
 
 Each website suite also includes:
 
@@ -416,7 +396,26 @@ statuses, and elapsed time. Request and response payloads are also captured for
 improved debugging. Tests without network or browser activity still report
 their duration, markers, and result.
 
-Configure these safeguards in each website's `suite_config.py`. At minimum:
+For quieter full-repository runs, suppress only terminal diagnostics while
+keeping HTML and report-section diagnostics intact:
+
+```bash
+pytest --quiet-diagnostics
+```
+
+or:
+
+```bash
+TERMINAL_DIAGNOSTICS=false pytest
+```
+
+When both are present, `--quiet-diagnostics` wins.
+
+Configure these safeguards in each website's `suite_config.py`. Most generated
+suites use these defaults directly, but site-specific plugins may replace some
+tests with custom code and stop relying on every setting listed below.
+
+Common settings:
 
 - smoke:
   - `SMOKE_HEALTH_PATH`
@@ -424,11 +423,20 @@ Configure these safeguards in each website's `suite_config.py`. At minimum:
   - `SMOKE_ROOT_PATH`
   - `SMOKE_ROOT_SELECTOR`
 - performance:
+  - `PERFORMANCE_MAX_RESPONSE_MS`
+  - `PERFORMANCE_MAX_TTFB_MS`
+  - `PERFORMANCE_MAX_LOAD_MS`
+  - `PERFORMANCE_WARMUP_RUNS`
+  - `PERFORMANCE_SAMPLE_COUNT`
+
+Generic suites additionally use:
+
+- performance routes and selectors:
   - `PERF_HOME_PATH`
   - `PERF_HOME_READY_SELECTOR`
   - `PERF_MOBILE_PATH`
   - `PERF_MOBILE_READY_SELECTOR`
-- security:
+- security routes and selectors:
   - `SECURITY_SEARCH_PATH`
   - `SECURITY_SEARCH_INPUT_SELECTOR`
   - `SECURITY_SEARCH_SUBMIT_SELECTOR`
@@ -446,9 +454,10 @@ Reusable live-target templates are available under `tests/one_shot/`:
 - `test_security.py`
 
 These are intended to be copied into a dedicated website suite and adjusted for
-that site's selectors and routes. They require `BASE_URL` in `.env` or an
-explicit `--target-url` at runtime. Optional `ONE_SHOT_*` environment
-variables allow quick experimentation without editing the files.
+that site's selectors and routes. They use `BASE_URL` from `.env` by default,
+or `--target-url` when you want to probe a one-off environment without editing
+the suite. Optional `ONE_SHOT_*` environment variables allow quick
+experimentation without editing the files.
 
 Run only API tests:
 
@@ -539,12 +548,14 @@ tests/
   unit/                      Deterministic framework and agent tests
   one_shot/                  Copyable smoke, performance, and security templates
   websites/
-    helpers.py               Shared helpers for website suites
+    helpers.py               Shared generic helpers for website suites
     automationexercise_com/  API, UI, smoke, performance, security, generated tests
       helpers.py             Automation Exercise page objects and selector helpers
     reqres_in/               API, smoke, performance, security, generated tests
-    saucedemo_com/           UI, smoke, performance, security, generated tests
+    saucedemo_com/           UI, BDD, smoke, performance, security, generated tests
       helpers.py             SauceDemo page objects and selector helpers
+    sabre_com/               Smoke, performance, security, generated tests
+      helpers.py             Sabre consent-handling helpers
     toptal_com/              Smoke, performance, security, generated tests
 utils/                       Reporting, logging, mocks, schema, and visual helpers
 ```

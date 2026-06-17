@@ -45,3 +45,38 @@ def test_smoke_diagnostics_write_visible_terminal_payload():
     assert payload["response_headers"]["set-cookie"] == "<redacted>"
     assert "https://example.test/health" in lines[0]
     assert '"server": "example"' in lines[0]
+
+
+def test_smoke_diagnostics_respects_quiet_controls(monkeypatch):
+    lines = []
+
+    class Terminal:
+        def write_line(self, value):
+            lines.append(value)
+
+    class PluginManager:
+        def get_plugin(self, name):
+            return Terminal() if name == "terminalreporter" else None
+
+    class Config:
+        pluginmanager = PluginManager()
+
+        @staticmethod
+        def getoption(name):
+            if name == "--quiet-diagnostics":
+                return True
+            raise AssertionError(f"unexpected option lookup: {name}")
+
+    monkeypatch.setenv("TERMINAL_DIAGNOSTICS", "true")
+    payload = emit_smoke_diagnostics(
+        Config(),
+        check="backend-gateway-health",
+        method="GET",
+        url="https://example.test/health",
+        status=200,
+        elapsed_ms=12.345,
+        headers={"server": "example"},
+    )
+
+    assert payload["status"] == 200
+    assert lines == []

@@ -11,6 +11,7 @@ class SabreSuitePlugin(SuitePlugin):
         normalized_url: str,
         name: str,
     ) -> str:
+        """Return the minimal Sabre suite config source."""
         return (
             '"""Website-specific suite configuration."""\n\n'
             "import os\n\n"
@@ -41,6 +42,7 @@ class SabreSuitePlugin(SuitePlugin):
         )
 
     def render_security_test_source(self, suite_name: str) -> str:
+        """Return the Sabre-specific security test module."""
         return f'''"""Security verification tests for this website suite."""
 
 from __future__ import annotations
@@ -164,6 +166,7 @@ async def test_http_security_defense_headers(
 '''
 
     def render_helpers_source(self, suite_name: str) -> str:
+        """Return the Sabre-specific helper module."""
         return '''"""Sabre-specific website helpers."""
 
 from __future__ import annotations
@@ -212,6 +215,7 @@ async def dismiss_sabre_consent(page: Page) -> None:
 '''
 
     def render_performance_test_source(self, suite_name: str) -> str:
+        """Return the Sabre-specific performance test module."""
         return f'''"""Performance tests for this website suite."""
 
 import time

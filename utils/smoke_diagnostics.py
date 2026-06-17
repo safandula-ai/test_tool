@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -31,6 +32,21 @@ def sanitize_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return sanitized
 
 
+def _terminal_diagnostics_enabled(pytestconfig: pytest.Config) -> bool:
+    """Return whether smoke diagnostics should be written to the terminal."""
+    try:
+        if pytestconfig.getoption("--quiet-diagnostics"):
+            return False
+    except Exception:
+        pass
+    return os.getenv("TERMINAL_DIAGNOSTICS", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def emit_smoke_diagnostics(
     pytestconfig: pytest.Config,
     *,
@@ -42,7 +58,7 @@ def emit_smoke_diagnostics(
     headers: Mapping[str, str],
     details: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Print a smoke result despite output capture."""
+    """Return smoke diagnostics and optionally publish them to the terminal."""
     payload: dict[str, Any] = {
         "check": check,
         "method": method,
@@ -56,7 +72,7 @@ def emit_smoke_diagnostics(
 
     rendered = json.dumps(payload, indent=2, sort_keys=True)
     terminal = pytestconfig.pluginmanager.get_plugin("terminalreporter")
-    if terminal is not None:
+    if terminal is not None and _terminal_diagnostics_enabled(pytestconfig):
         terminal.write_line(f"SMOKE DIAGNOSTICS\n{rendered}")
 
     return payload

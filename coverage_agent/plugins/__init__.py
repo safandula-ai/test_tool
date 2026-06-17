@@ -5,7 +5,7 @@ from .base import ApiScraper, SuitePlugin
 from .automationexercise import AutomationExerciseScraper
 from .reqres import ReqResScraper
 from .sabre import SabreSuitePlugin
-from .toptal import ToptalScraper
+from .toptal import ToptalScraper, ToptalSuitePlugin
 
 
 def get_scraper(base_url: str) -> ApiScraper | None:
@@ -25,4 +25,6 @@ def get_suite_plugin(base_url: str) -> SuitePlugin | None:
     netloc = urlsplit(base_url).netloc
     if "sabre.com" in netloc:
         return SabreSuitePlugin()
+    if "toptal.com" in netloc:
+        return ToptalSuitePlugin()
     return None
