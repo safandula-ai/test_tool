@@ -16,7 +16,6 @@ RESPONSE_SCHEMA = load_schema(
 
 CREATE_ACCOUNT_ENDPOINT = "POST /api/createAccount"
 DELETE_ACCOUNT_ENDPOINT = "DELETE /api/deleteAccount"
-VERIFY_LOGIN_ENDPOINT = "POST /api/verifyLogin"
 
 
 def _validated_payload(response: httpx.Response) -> dict:
@@ -40,14 +39,6 @@ class AutomationExerciseClient(BaseClient):
         response = await self.client.request(
             "DELETE",
             DELETE_ACCOUNT_ENDPOINT.split(" ", 1)[1],
-            data={"email": email, "password": password},
-        )
-        return _validated_payload(response)
-
-    async def verify_login(self, email: str, password: str) -> dict:
-        """Verify account credentials without opening the UI."""
-        response = await self.client.post(
-            VERIFY_LOGIN_ENDPOINT.split(" ", 1)[1],
             data={"email": email, "password": password},
         )
         return _validated_payload(response)

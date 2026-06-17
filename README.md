@@ -49,6 +49,13 @@ The framework reads configuration from environment variables and `.env` files.
 - `PERFORMANCE_MAX_TTFB_MS`: homepage time-to-first-byte threshold for browser performance checks, default `800`
 - `PERFORMANCE_MAX_LOAD_MS`: homepage full-load threshold for browser performance checks, default `3000`
 - `PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS`: throttled mobile interactive threshold, default `10000`
+- `PERFORMANCE_WARMUP_RUNS`: warmup iterations discarded before website performance assertions, default `1`
+- `PERFORMANCE_SAMPLE_COUNT`: measured website performance samples aggregated by median, default `3`
+- `PERFORMANCE_MOBILE_LATENCY_MS`: synthetic mobile latency in milliseconds, default `300`
+- `PERFORMANCE_MOBILE_DOWNLOAD_KBPS`: synthetic mobile download rate in kilobits per second, default `400`
+- `PERFORMANCE_MOBILE_UPLOAD_KBPS`: synthetic mobile upload rate in kilobits per second, default `150`
+- `PERFORMANCE_MOBILE_CPU_THROTTLE_RATE`: synthetic mobile CPU slowdown multiplier, default `4`
+- `PERFORMANCE_MOBILE_PROFILE_NAME`: label recorded in diagnostics for the mobile throttle profile, default `slow_3g_like`
 - `API_BASE_URL`: API target base URL
 - `HEADLESS`: run browser headless when `true`
 - `HTML_REPORT_REQUIRED`: fail an otherwise successful run when pytest-html output is unavailable
@@ -523,7 +530,7 @@ coverage_agent/
   template_engine.py         Dynamic suite assembly and test selection
   __main__.py                coverage_agent command-line entry point
 data/                        Test data and visual baselines
-pages/                       Async and synchronous Playwright page objects
+pages/                       Generic async and synchronous Playwright page objects
 schemas/                     JSON Schema API contracts
 tests/
   api/                       Provider-neutral mocked API contracts
@@ -534,8 +541,10 @@ tests/
   websites/
     helpers.py               Shared helpers for website suites
     automationexercise_com/  API, UI, smoke, performance, security, generated tests
+      helpers.py             Automation Exercise page objects and selector helpers
     reqres_in/               API, smoke, performance, security, generated tests
     saucedemo_com/           UI, smoke, performance, security, generated tests
+      helpers.py             SauceDemo page objects and selector helpers
     toptal_com/              Smoke, performance, security, generated tests
 utils/                       Reporting, logging, mocks, schema, and visual helpers
 ```

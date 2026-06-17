@@ -7,7 +7,6 @@ import pytest
 from playwright.async_api import async_playwright, expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.saucedemo_com.suite_config import (
     BASE_URL,
     SMOKE_HEALTH_PATH,
@@ -31,13 +30,9 @@ from utils.smoke_diagnostics import emit_smoke_diagnostics
     presence="deterministic",
     template="APIContractTemplate",
 )
-async def test_backend_gateway_health(pytestconfig, settings):
+async def test_backend_gateway_health(pytestconfig):
     """Probe the backend without launching a browser rendering context."""
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
         try:
@@ -79,13 +74,9 @@ async def test_backend_gateway_health(pytestconfig, settings):
     presence="deterministic",
     template="ComponentVisibilityTemplate",
 )
-async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
+async def test_homepage_shell_renders(page_factory, pytestconfig):
     """Fail quickly when navigation or the critical application shell is unavailable."""
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     async with page_factory(base_url) as page:
         started = perf_counter()
         response = await page.goto(

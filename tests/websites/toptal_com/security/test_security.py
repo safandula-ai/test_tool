@@ -7,8 +7,6 @@ import pytest
 from coverage_agent.decorators import covers
 from tests.websites.helpers import (
     dismiss_consent_if_present,
-    require_live_target,
-    resolve_target_url,
 )
 from tests.websites.toptal_com.suite_config import (
     BASE_URL,
@@ -34,15 +32,9 @@ from tests.websites.toptal_com.suite_config import (
 )
 async def test_search_rejects_reflected_xss_payload(
     page_factory,
-    pytestconfig,
-    settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
 
     async with page_factory(base_url) as page:
@@ -94,15 +86,9 @@ async def test_search_rejects_reflected_xss_payload(
 )
 async def test_http_security_defense_headers(
     page_factory,
-    pytestconfig,
-    settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     required_headers = {
         "strict-transport-security": "HSTS protocol enforcement",
         "x-frame-options": "clickjacking mitigation",

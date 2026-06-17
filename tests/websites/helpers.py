@@ -10,14 +10,16 @@ def resolve_target_url(
 ) -> str:
     """Resolve the live target URL, preferring terminal overrides."""
     override = pytestconfig.getoption("--target-url")
+
+    def normalize(value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {"'", '"'}:
+            normalized = normalized[1:-1].strip()
+        return normalized.rstrip("/")
+
     if override:
-        return override.rstrip("/")
-    return default_base_url.rstrip("/")
-
-
-def require_live_target(pytestconfig, settings) -> None:
-    """Website suites always run against suite_config.py or a terminal override."""
-    _ = (pytestconfig, settings)
+        return normalize(override)
+    return normalize(default_base_url)
 
 
 async def dismiss_consent_if_present(

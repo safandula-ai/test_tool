@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.toptal_com.suite_config import BASE_URL, MOBILE_USER_AGENT, MOBILE_VIEWPORT
 
 from ._test_generated_coverage_gaps_ui_helpers import (
@@ -28,11 +27,8 @@ def resolve_generated_ui_case(
     settings,
     case_name: str,
 ) -> tuple[str, dict[str, object]]:
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    _ = (pytestconfig, settings)
+    base_url = BASE_URL
     case_data = CASE_DATA.get(case_name, {})
     expected_snapshot = case_data.get("ui_snapshot", {})
     return base_url, expected_snapshot

@@ -14,10 +14,6 @@ class SyncBasePage:
         """Return a resilient locator backed by `data-testid`."""
         return self.page.get_by_test_id(value)
 
-    def text(self, value: str):
-        """Return a text locator for visible content assertions."""
-        return self.page.get_by_text(value)
-
     def fill_test_id(self, value: str, text: str) -> None:
         """Fill a `data-testid` field with the provided text."""
         self.test_id(value).fill(text)

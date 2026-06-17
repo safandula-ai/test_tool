@@ -441,15 +441,15 @@ def test_template_page_and_feature_indexes_select_impacted_tests():
                 "template": "InteractionTemplate",
                 "page": "/login",
                 "feature": "feature:authentication",
-                "file_path": "tests/ui/test_login_flow.py",
-                "test_function": "test_login_page_smoke",
+                "file_path": "tests/features/authentication/bdd/test_login_steps.py",
+                "test_function": "test_successful_login",
             }
         ]
     }
 
     assert DynamicSuiteAssembler.select_tests(
         coverage, template="InteractionTemplate", feature="feature:authentication"
-    ) == ["tests/ui/test_login_flow.py::test_login_page_smoke"]
+    ) == ["tests/features/authentication/bdd/test_login_steps.py::test_successful_login"]
     assert build_coverage_indexes(coverage)["pages"]["/login"][0]["target"] == "login-submit"
 
 

@@ -6,7 +6,6 @@ import pytest
 from playwright.async_api import expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.saucedemo_com.suite_config import BASE_URL
 
 
@@ -39,18 +38,16 @@ async def _assert_interaction(target) -> None:
     await expect(target).to_be_enabled()
 
 
-def _generated_target_url(pytestconfig, settings) -> str:
-    require_live_target(pytestconfig, settings)
-    return resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+def _generated_target_url(pytestconfig) -> str:
+    _ = pytestconfig
+    return BASE_URL
 
 
 @covers(type="ui", target="login-button", priority="high", template="InteractionTemplate",
         page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_login_button(page_factory, pytestconfig, settings):
-    base_url = _generated_target_url(pytestconfig, settings)
+    _ = settings
+    base_url = _generated_target_url(pytestconfig)
     async with page_factory(base_url) as browser_page:
         await browser_page.goto('/')
         target = _target(browser_page, "login-button")
@@ -60,7 +57,8 @@ async def test_generated_ui_login_button(page_factory, pytestconfig, settings):
 @covers(type="ui", target="login-container", priority="high", template="ComponentVisibilityTemplate",
         page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_login_container(page_factory, pytestconfig, settings):
-    base_url = _generated_target_url(pytestconfig, settings)
+    _ = settings
+    base_url = _generated_target_url(pytestconfig)
     async with page_factory(base_url) as browser_page:
         await browser_page.goto('/')
         target = _target(browser_page, "login-container")
@@ -70,7 +68,8 @@ async def test_generated_ui_login_container(page_factory, pytestconfig, settings
 @covers(type="ui", target="login-credentials", priority="high", template="ComponentVisibilityTemplate",
         page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_login_credentials(page_factory, pytestconfig, settings):
-    base_url = _generated_target_url(pytestconfig, settings)
+    _ = settings
+    base_url = _generated_target_url(pytestconfig)
     async with page_factory(base_url) as browser_page:
         await browser_page.goto('/')
         target = _target(browser_page, "login-credentials")
@@ -85,7 +84,8 @@ async def test_generated_ui_login_credentials(page_factory, pytestconfig, settin
         feature='feature:generated-gap-coverage',
         presence="deterministic")
 async def test_generated_ui_login_credentials_container(page_factory, pytestconfig, settings):
-    base_url = _generated_target_url(pytestconfig, settings)
+    _ = settings
+    base_url = _generated_target_url(pytestconfig)
     async with page_factory(base_url) as browser_page:
         await browser_page.goto('/')
         target = _target(browser_page, "login-credentials-container")
@@ -95,7 +95,8 @@ async def test_generated_ui_login_credentials_container(page_factory, pytestconf
 @covers(type="ui", target="password", priority="high", template="InputValidationTemplate",
         page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_password(page_factory, pytestconfig, settings):
-    base_url = _generated_target_url(pytestconfig, settings)
+    _ = settings
+    base_url = _generated_target_url(pytestconfig)
     async with page_factory(base_url) as browser_page:
         await browser_page.goto('/')
         target = _target(browser_page, "password")
@@ -105,7 +106,8 @@ async def test_generated_ui_password(page_factory, pytestconfig, settings):
 @covers(type="ui", target="username", priority="high", template="ComponentVisibilityTemplate",
         page='/', feature='feature:generated-gap-coverage', presence="deterministic")
 async def test_generated_ui_username(page_factory, pytestconfig, settings):
-    base_url = _generated_target_url(pytestconfig, settings)
+    _ = settings
+    base_url = _generated_target_url(pytestconfig)
     async with page_factory(base_url) as browser_page:
         await browser_page.goto('/')
         target = _target(browser_page, "username")

@@ -113,7 +113,7 @@ def main() -> int:
         engine = GapAnalysisEngine.from_files(args.coverage, args.application)
         report = engine.write_gap_manifest(args.output)
         print(engine.console_report())
-        return 1 if report["errors"] else 0
+        return 1 if report["errors"] or report["metrics"]["blocking_gap_count"] else 0
     elif args.command == "assemble":
         application_map = json.loads(Path(args.application).read_text(encoding="utf-8"))
         suite = DynamicSuiteAssembler().assemble(application_map, load_manifests(args.manifests))

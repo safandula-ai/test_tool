@@ -1,13 +1,44 @@
-"""Automation Exercise signup page object."""
+"""Automation Exercise-specific page objects and selector helpers."""
 
 from __future__ import annotations
 
-from playwright.async_api import expect
+from playwright.async_api import Locator, Page, expect
 
-from pages.base_page import BasePage
+from tests.websites.helpers import dismiss_consent_if_present
 
 
-class AutomationSignupPage(BasePage):
+class AutomationExercisePage:
+    """Base page object for Automation Exercise selectors and shared flows."""
+
+    def __init__(self, page: Page):
+        self.page = page
+
+    def data_qa(self, value: str) -> Locator:
+        """Return a locator backed by Automation Exercise's `data-qa` attribute."""
+        return self.page.locator(f'[data-qa="{value}"]')
+
+    def text(self, value: str, exact: bool = False) -> Locator:
+        """Return a text locator for visible content assertions."""
+        return self.page.get_by_text(value, exact=exact)
+
+    async def fill_data_qa(self, value: str, text: str) -> None:
+        """Fill a field selected by `data-qa`."""
+        await self.data_qa(value).fill(text)
+
+    async def click_data_qa(self, value: str) -> None:
+        """Click an element selected by `data-qa`."""
+        await self.data_qa(value).click()
+
+    async def dismiss_consent_dialog(self) -> None:
+        """Accept the optional consent dialog that can block form controls."""
+        await dismiss_consent_if_present(
+            self.page,
+            root_selector=".fc-dialog-container",
+            accept_selector=".fc-cta-consent, button:has-text('Consent')",
+        )
+
+
+class AutomationSignupPage(AutomationExercisePage):
     """Model signup actions and duplicate-email validation."""
 
     signup_name = "signup-name"
@@ -20,12 +51,6 @@ class AutomationSignupPage(BasePage):
         """Open the signup and login page."""
         await self.page.goto("/login")
         await self.dismiss_consent_dialog()
-
-    async def dismiss_consent_dialog(self) -> None:
-        """Accept the optional consent dialog that can block form controls."""
-        consent = self.page.locator(".fc-cta-consent, button:has-text('Consent')").first
-        if await consent.is_visible():
-            await consent.click()
 
     async def signup(self, name: str, email: str) -> None:
         """Submit the first signup step."""
