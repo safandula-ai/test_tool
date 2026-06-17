@@ -34,3 +34,27 @@ class SuitePlugin(ABC):
     def suite_config_overrides(self) -> dict[str, object]:
         """Return suite_config constants that should override generic defaults."""
         return {}
+
+    def render_suite_config_source(
+        self,
+        normalized_url: str,
+        name: str,
+    ) -> str | None:
+        """Optionally return a fully custom suite_config.py source."""
+        _ = (normalized_url, name)
+        return None
+
+    def render_security_test_source(self, suite_name: str) -> str | None:
+        """Optionally return a fully custom security test module source."""
+        _ = suite_name
+        return None
+
+    def render_performance_test_source(self, suite_name: str) -> str | None:
+        """Optionally return a fully custom performance test module source."""
+        _ = suite_name
+        return None
+
+    def render_helpers_source(self, suite_name: str) -> str | None:
+        """Optionally return a suite-local helpers.py source."""
+        _ = suite_name
+        return None

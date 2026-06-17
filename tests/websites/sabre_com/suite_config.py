@@ -25,16 +25,3 @@ PERFORMANCE_MOBILE_DOWNLOAD_KBPS = int(os.getenv("PERFORMANCE_MOBILE_DOWNLOAD_KB
 PERFORMANCE_MOBILE_UPLOAD_KBPS = int(os.getenv("PERFORMANCE_MOBILE_UPLOAD_KBPS", "150"))
 PERFORMANCE_MOBILE_CPU_THROTTLE_RATE = int(os.getenv("PERFORMANCE_MOBILE_CPU_THROTTLE_RATE", "4"))
 PERFORMANCE_MOBILE_PROFILE_NAME = os.getenv("PERFORMANCE_MOBILE_PROFILE_NAME", "slow_3g_like")
-SECURITY_SEARCH_PATH = "/"
-SECURITY_SEARCH_TRIGGER_SELECTOR = "a.search"
-SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR = "a.search.is-active"
-SECURITY_SEARCH_PANEL_SELECTOR = ".site-header__main--search-panel"
-SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR = ".site-header__main--search-panel.is-active"
-SECURITY_SEARCH_INPUT_SELECTOR = "input[type='search'], input[name='search'], input[type='text']"
-SECURITY_SEARCH_SUBMIT_SELECTOR = "button[type='submit'], input[type='submit']"
-SECURITY_CONSENT_ROOT_SELECTOR = ".fc-consent-root"
-SECURITY_CONSENT_ACCEPT_SELECTOR = (
-    ".fc-cta-consent, button:has-text('Consent'), "
-    "button:has-text('Accept')"
-)
-SECURITY_CONSENT_OVERLAY_SELECTOR = ".fc-dialog-overlay"

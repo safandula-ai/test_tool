@@ -330,6 +330,7 @@ from tests.websites.{suite_name}.suite_config import (
     BASE_URL,
     SECURITY_CONSENT_ACCEPT_SELECTOR,
     SECURITY_CONSENT_OVERLAY_SELECTOR,
+    SECURITY_CONSENT_REJECT_SELECTOR,
     SECURITY_CONSENT_ROOT_SELECTOR,
     SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR,
     SECURITY_SEARCH_PANEL_SELECTOR,
@@ -368,6 +369,7 @@ async def test_search_rejects_reflected_xss_payload(
             root_selector=SECURITY_CONSENT_ROOT_SELECTOR,
             accept_selector=SECURITY_CONSENT_ACCEPT_SELECTOR,
             overlay_selector=SECURITY_CONSENT_OVERLAY_SELECTOR,
+            reject_selector=SECURITY_CONSENT_REJECT_SELECTOR,
         )
         await page.wait_for_load_state("networkidle")
         trigger_found = False
@@ -404,6 +406,13 @@ async def test_search_rejects_reflected_xss_payload(
         await search_input.fill(xss_payload)
         await search_submit.click(force=True)
         await page.wait_for_load_state("networkidle")
+        await dismiss_consent_if_present(
+            page,
+            root_selector=SECURITY_CONSENT_ROOT_SELECTOR,
+            accept_selector=SECURITY_CONSENT_ACCEPT_SELECTOR,
+            overlay_selector=SECURITY_CONSENT_OVERLAY_SELECTOR,
+            reject_selector=SECURITY_CONSENT_REJECT_SELECTOR,
+        )
         script_node = page.locator("script#malicious-xss")
         script_executed = await page.evaluate("() => Boolean(window.__xss_executed)")
         script_node_count = await script_node.count()
@@ -512,6 +521,12 @@ def render_suite_config_source(
 ) -> str:
     """Render the default suite configuration for a website suite."""
     defaults = {
+        "SECURITY_CONSENT_ROOT_SELECTOR": ".fc-consent-root",
+        "SECURITY_CONSENT_ACCEPT_SELECTOR": (
+            ".fc-cta-consent, button:has-text('Consent'), button:has-text('Accept')"
+        ),
+        "SECURITY_CONSENT_REJECT_SELECTOR": "",
+        "SECURITY_CONSENT_OVERLAY_SELECTOR": ".fc-dialog-overlay",
         "SECURITY_SEARCH_TRIGGER_SELECTOR": "",
         "SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR": "",
         "SECURITY_SEARCH_PANEL_SELECTOR": "",
@@ -551,12 +566,10 @@ def render_suite_config_source(
         f"SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR = {json.dumps(defaults['SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR'])}\n"
         'SECURITY_SEARCH_INPUT_SELECTOR = "input[type=\'search\'], input[name=\'search\'], input[type=\'text\']"\n'
         'SECURITY_SEARCH_SUBMIT_SELECTOR = "button[type=\'submit\'], input[type=\'submit\']"\n'
-        'SECURITY_CONSENT_ROOT_SELECTOR = ".fc-consent-root"\n'
-        'SECURITY_CONSENT_ACCEPT_SELECTOR = (\n'
-        '    ".fc-cta-consent, button:has-text(\'Consent\'), "\n'
-        '    "button:has-text(\'Accept\')"\n'
-        ')\n'
-        'SECURITY_CONSENT_OVERLAY_SELECTOR = ".fc-dialog-overlay"\n'
+        f"SECURITY_CONSENT_ROOT_SELECTOR = {json.dumps(defaults['SECURITY_CONSENT_ROOT_SELECTOR'])}\n"
+        f"SECURITY_CONSENT_ACCEPT_SELECTOR = {json.dumps(defaults['SECURITY_CONSENT_ACCEPT_SELECTOR'])}\n"
+        f"SECURITY_CONSENT_REJECT_SELECTOR = {json.dumps(defaults['SECURITY_CONSENT_REJECT_SELECTOR'])}\n"
+        f"SECURITY_CONSENT_OVERLAY_SELECTOR = {json.dumps(defaults['SECURITY_CONSENT_OVERLAY_SELECTOR'])}\n"
     )
     return source
 
@@ -580,7 +593,19 @@ def ensure_website_suite(
 
     config_file = root / "suite_config.py"
     config_source = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
-    if not config_file.exists() or "PERFORMANCE_MAX_RESPONSE_MS" not in config_source:
+    custom_config_source = (
+        suite_plugin.render_suite_config_source(normalized_url, name)
+        if suite_plugin is not None
+        else None
+    )
+    missing_override_keys = [key for key in suite_overrides if f"{key} =" not in config_source]
+    if custom_config_source is not None:
+        config_file.write_text(custom_config_source, encoding="utf-8")
+    elif (
+        not config_file.exists()
+        or "PERFORMANCE_MAX_RESPONSE_MS" not in config_source
+        or missing_override_keys
+    ):
         config_file.write_text(
             render_suite_config_source(normalized_url, name, suite_overrides),
             encoding="utf-8",
@@ -597,9 +622,24 @@ def ensure_website_suite(
     ):
         smoke_file.write_text(render_smoke_test_source(name), encoding="utf-8")
 
+    custom_helpers_source = (
+        suite_plugin.render_helpers_source(name)
+        if suite_plugin is not None
+        else None
+    )
+    if custom_helpers_source is not None:
+        (root / "helpers.py").write_text(custom_helpers_source, encoding="utf-8")
+
     performance_file = root / "performance" / "test_performance.py"
+    custom_performance_source = (
+        suite_plugin.render_performance_test_source(name)
+        if suite_plugin is not None
+        else None
+    )
     performance_source = performance_file.read_text(encoding="utf-8") if performance_file.exists() else ""
-    if not performance_file.exists() or any(
+    if custom_performance_source is not None:
+        performance_file.write_text(custom_performance_source, encoding="utf-8")
+    elif not performance_file.exists() or any(
         marker in performance_source
         for marker in (
             "from tests.websites.helpers import require_live_target, resolve_target_url",
@@ -609,8 +649,15 @@ def ensure_website_suite(
         performance_file.write_text(render_performance_test_source(name), encoding="utf-8")
 
     security_file = root / "security" / "test_security.py"
+    custom_security_source = (
+        suite_plugin.render_security_test_source(name)
+        if suite_plugin is not None
+        else None
+    )
     security_source = security_file.read_text(encoding="utf-8") if security_file.exists() else ""
-    if not security_file.exists() or "require_live_target" in security_source:
+    if custom_security_source is not None:
+        security_file.write_text(custom_security_source, encoding="utf-8")
+    elif not security_file.exists() or "require_live_target" in security_source:
         security_file.write_text(render_security_test_source(name), encoding="utf-8")
 
     return WebsiteSuite(name=name, base_url=normalized_url, root=root)

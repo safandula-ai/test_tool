@@ -28,15 +28,26 @@ async def dismiss_consent_if_present(
     root_selector: str,
     accept_selector: str,
     overlay_selector: str = ".fc-dialog-overlay",
+    reject_selector: str | None = None,
 ) -> None:
     """Remove a consent dialog that blocks interactions, when one exists."""
     root = page.locator(root_selector).first
     if await root.count() == 0:
         return
-    accept_button = page.locator(accept_selector).first
-    if await accept_button.is_visible():
-        await accept_button.click(force=True)
-    if await root.is_visible():
+    for selector in (accept_selector, reject_selector):
+        if not selector:
+            continue
+        button = page.locator(selector).first
+        if await button.count() == 0:
+            continue
+        if await button.is_visible():
+            await button.click(force=True)
+            try:
+                await root.wait_for(state="hidden", timeout=2_000)
+                return
+            except Exception:
+                continue
+    if await root.count() > 0:
         await page.evaluate(
             """([rootSelector, overlaySelector]) => {
                 const root = document.querySelector(rootSelector);
