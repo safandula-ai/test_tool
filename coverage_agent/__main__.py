@@ -11,7 +11,7 @@ from config.settings import get_settings
 from coverage_agent.analyzer import build_coverage_indexes, generate_coverage_map
 from coverage_agent.discovery import PlaywrightDiscoveryEngine
 from coverage_agent.gap_analysis import GapAnalysisEngine
-from coverage_agent.gap_scaffolder import scaffold_gap_tests
+from coverage_agent.gap_scaffolder import scaffold_gap_tests, scaffolded_output_paths
 from coverage_agent.manifests import load_manifests
 from coverage_agent.suite_layout import ensure_website_suite
 from coverage_agent.template_engine import DynamicSuiteAssembler
@@ -155,7 +155,12 @@ def main() -> int:
             base_url_setting=args.base_url_setting,
             feature=args.feature,
         )
-        print(f"Generated {count} gap test(s) in {output}")
+        generated_outputs = [path for path in scaffolded_output_paths(output) if path.exists()]
+        if generated_outputs:
+            rendered_outputs = ", ".join(str(path) for path in generated_outputs)
+            print(f"Generated {count} gap test(s) in {rendered_outputs}")
+        else:
+            print(f"Generated {count} gap test(s) in {output}")
     return 0
 
 

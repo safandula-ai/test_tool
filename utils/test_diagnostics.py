@@ -145,11 +145,6 @@ def emit_test_diagnostics(
     item: pytest.Item,
     recorder: TestDiagnosticRecorder,
 ) -> dict[str, Any]:
-    """Write diagnostics to terminal and per-test capture."""
+    """Return the current diagnostics payload for later publication."""
     payload = recorder.payload(item)
-    rendered = render_test_diagnostics(item, recorder)
-    print(f"TEST DIAGNOSTICS\n{rendered}", flush=True)
-    terminal = pytestconfig.pluginmanager.get_plugin("terminalreporter")
-    if terminal is not None:
-        terminal.write_line(f"TEST DIAGNOSTICS\n{rendered}")
     return payload

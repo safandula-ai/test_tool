@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import asyncio
+from datetime import datetime
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,7 +20,9 @@ from utils.api_mocks import build_transport
 from utils.logging import get_logger, start_test_log_capture, stop_test_log_capture
 from utils.pytest_html_report import (
     PytestHtmlReportResult,
+    artifact_file_name,
     prepare_pytest_html_report,
+    relative_report_link,
 )
 from utils.smoke_diagnostics import sanitize_headers
 from utils.test_diagnostics import (
@@ -47,7 +50,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--html-report-dir",
         dest="generated_html_report_dir",
-        default="reports/pytest-html",
+        default=str(get_settings().artifact_dir / "pytest-html"),
         help="Archive directory for timestamped pytest-html reports",
     )
     parser.addoption(
@@ -102,6 +105,78 @@ def pytest_configure(config: pytest.Config) -> None:
             config.option.htmlpath = str(result.report_path)
         config.option.self_contained_html = True
     setattr(config, "_pytest_html_report_result", result)
+
+
+def _html_extras_plugin(config: pytest.Config):
+    """Return pytest-html extras module when the plugin is available."""
+    if not config.pluginmanager.hasplugin("html"):
+        return None
+    try:
+        from pytest_html import extras
+    except Exception:
+        return None
+    return extras
+
+
+def _append_artifact_links(item: pytest.Item, report: pytest.TestReport) -> None:
+    """Attach clickable artifact links to the pytest-html report."""
+    extras = _html_extras_plugin(item.config)
+    artifact_paths = getattr(item, "_report_artifacts", [])
+    report_result = getattr(
+        item.config,
+        "_pytest_html_report_result",
+        PytestHtmlReportResult("unknown", "pytest-html report status is unavailable."),
+    )
+    if extras is None or not artifact_paths or report_result.report_path is None:
+        return
+    existing = list(getattr(report, "extras", []))
+    for artifact in artifact_paths:
+        link = relative_report_link(report_result.report_path, artifact["path"])
+        existing.append(extras.url(link, name=artifact["name"]))
+    report.extras = existing
+
+
+def _attach_artifacts_to_visible_report(item: pytest.Item) -> None:
+    """Attach artifact links to the report phase rendered by pytest-html."""
+    target_report = None
+    rep_call = getattr(item, "rep_call", None)
+    rep_setup = getattr(item, "rep_setup", None)
+    if rep_call is not None and rep_call.failed:
+        target_report = rep_call
+    elif rep_setup is not None and rep_setup.failed:
+        target_report = rep_setup
+    if target_report is not None:
+        _append_artifact_links(item, target_report)
+
+
+def _visible_report(item: pytest.Item):
+    """Return the report phase that should carry final diagnostics."""
+    rep_call = getattr(item, "rep_call", None)
+    rep_setup = getattr(item, "rep_setup", None)
+    if rep_call is not None:
+        return rep_call
+    if rep_setup is not None:
+        return rep_setup
+    return None
+
+
+def _publish_terminal_diagnostics(
+    config: pytest.Config,
+    item: pytest.Item,
+    rendered: str,
+) -> None:
+    """Write one diagnostics block to the terminal path best suited to the runner."""
+    if getattr(item, "_call_phase_diagnostics_written", False):
+        return
+    terminal = config.pluginmanager.get_plugin("terminalreporter")
+    prefers_terminalreporter = bool(
+        os.getenv("PYCHARM_HOSTED") or os.getenv("TEAMCITY_VERSION")
+    )
+    if prefers_terminalreporter and terminal is not None:
+        terminal.write_line(f"TEST DIAGNOSTICS\n{rendered}")
+    else:
+        print(f"TEST DIAGNOSTICS\n{rendered}", flush=True)
+    setattr(item, "_call_phase_diagnostics_written", True)
 
 
 @pytest.fixture(scope="session")
@@ -279,8 +354,12 @@ def page_factory(
                     message=str(error),
                 ),
             )
+            failed = False
             try:
                 yield page
+            except BaseException:
+                failed = True
+                raise
             finally:
                 if pending_diagnostics:
                     await asyncio.gather(*pending_diagnostics, return_exceptions=True)
@@ -293,24 +372,65 @@ def page_factory(
                     url=page.url,
                     title=final_title,
                 )
-                failed = getattr(request.node, "rep_call", None) and request.node.rep_call.failed
+                artifact_stamp = datetime.now()
+                report_artifacts: list[dict[str, str]] = []
                 if failed and settings.screenshot_on_failure:
+                    screenshot_path = settings.screenshot_dir / artifact_file_name(
+                        request.node.nodeid,
+                        extension="png",
+                        now=artifact_stamp,
+                    )
                     await page.screenshot(
-                        path=str(
-                            settings.screenshot_dir / f"{request.node.name}.png"
-                        ),
+                        path=str(screenshot_path),
                         full_page=True,
                     )
+                    test_diagnostics.record(
+                        "browser_artifact",
+                        artifact_type="screenshot",
+                        path=str(screenshot_path),
+                    )
+                    report_artifacts.append(
+                        {"name": "Screenshot", "path": str(screenshot_path)}
+                    )
+                captured_video = page.video
                 if settings.trace_on_failure:
                     if failed:
-                        await context.tracing.stop(
-                            path=str(
-                                settings.artifact_dir / f"{request.node.name}.zip"
-                            )
+                        trace_path = settings.artifact_dir / artifact_file_name(
+                            request.node.nodeid,
+                            extension="zip",
+                            now=artifact_stamp,
                         )
+                        await context.tracing.stop(
+                            path=str(trace_path)
+                        )
+                        test_diagnostics.record(
+                            "browser_artifact",
+                            artifact_type="trace",
+                            path=str(trace_path),
+                        )
+                        report_artifacts.append({"name": "Trace", "path": str(trace_path)})
                     else:
                         await context.tracing.stop()
                 await context.close()
+                if settings.video_on_failure and captured_video is not None:
+                    source_video_path = Path(await captured_video.path())
+                    if failed:
+                        video_path = settings.video_dir / artifact_file_name(
+                            request.node.nodeid,
+                            extension="webm",
+                            now=artifact_stamp,
+                        )
+                        if source_video_path.exists():
+                            source_video_path.replace(video_path)
+                        test_diagnostics.record(
+                            "browser_artifact",
+                            artifact_type="video",
+                            path=str(video_path),
+                        )
+                        report_artifacts.append({"name": "Video", "path": str(video_path)})
+                    elif source_video_path.exists():
+                        source_video_path.unlink()
+                setattr(request.node, "_report_artifacts", report_artifacts)
                 await browser.close()
 
     return create_page
@@ -329,9 +449,17 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     if report.when == "call":
         rendered = render_test_diagnostics(item, recorder)
         append_report_diagnostics(report, rendered, list(log_buffer))
+        _publish_terminal_diagnostics(item.config, item, rendered)
     elif report.when == "setup" and report.failed:
         rendered = render_test_diagnostics(item, recorder)
         append_report_diagnostics(report, rendered, list(log_buffer))
+        _publish_terminal_diagnostics(item.config, item, rendered)
+    elif report.when == "teardown":
+        target_report = _visible_report(item)
+        if target_report is not None:
+            rendered = render_test_diagnostics(item, recorder)
+            append_report_diagnostics(target_report, rendered, list(log_buffer))
+        _attach_artifacts_to_visible_report(item)
 
 
 @pytest.hookimpl(trylast=True)

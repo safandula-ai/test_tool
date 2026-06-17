@@ -1,0 +1,5 @@
+{
+  "api_get_api_cms_sessions_status_200": {
+    "response_payload": "{\"success\": false, \"talent_signup_data\": null, \"user\": null}"
+  }
+}

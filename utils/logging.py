@@ -6,6 +6,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from config.settings import ROOT
+
 
 _TEST_LOG_BUFFER: ContextVar[list[str] | None] = ContextVar(
     "test_log_buffer",
@@ -33,9 +35,9 @@ def stop_test_log_capture(token: Token[list[str] | None]) -> None:
     _TEST_LOG_BUFFER.reset(token)
 
 
-def get_logger(level: str = "INFO", log_file: str | Path = "logs/framework.log"):
+def get_logger(level: str = "INFO", log_file: str | Path | None = None):
     """Configure stdout, file, and per-test loguru sinks for the framework."""
-    path = Path(log_file)
+    path = Path(log_file) if log_file is not None else ROOT / "logs" / "framework.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     logger.remove()
     logger.add(

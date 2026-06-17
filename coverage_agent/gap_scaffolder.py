@@ -7,8 +7,10 @@ from pathlib import Path
 
 from coverage_agent.gap_scaffolder_api import (
     automationexercise_helper_imports,
+    browser_fetch_helper_imports,
     render_api_test_function,
     render_automationexercise_helper_lines,
+    render_browser_fetch_helper_lines,
     render_data_loader_lines,
     render_reqres_helper_lines,
     reqres_helper_imports,
@@ -23,6 +25,7 @@ from coverage_agent.gap_scaffolder_common import (
     identifier,
     is_automationexercise,
     is_reqres,
+    is_toptal,
     load_gap_cases,
     render_covers_decorator,
     reqres_placeholder_target,
@@ -44,6 +47,7 @@ def _render_helper_module(
     include_ui_helpers: bool,
     include_automationexercise_helpers: bool,
     include_reqres_helpers: bool,
+    include_browser_fetch_helpers: bool,
     include_data_loader: bool,
 ) -> str:
     """Build the helper module source for the selected UI/API generated suite."""
@@ -51,6 +55,7 @@ def _render_helper_module(
         not include_ui_helpers
         and not include_automationexercise_helpers
         and not include_reqres_helpers
+        and not include_browser_fetch_helpers
         and not include_data_loader
     ):
         return ""
@@ -106,10 +111,23 @@ def _render_helper_module(
     if include_reqres_helpers:
         lines.extend(render_reqres_helper_lines())
 
+    if include_browser_fetch_helpers:
+        lines.extend(render_browser_fetch_helper_lines())
+
     if include_data_loader:
         lines.extend(render_data_loader_lines())
 
     return "\n".join(lines)
+
+
+def scaffolded_output_paths(output_path: str | Path) -> list[Path]:
+    """Return the concrete module paths that scaffolding may write for a destination."""
+    destination = Path(output_path)
+    output_stem = destination.stem.removesuffix("_ui").removesuffix("_api")
+    return [
+        destination.with_name(f"{output_stem}_ui.py"),
+        destination.with_name(f"{output_stem}_api.py"),
+    ]
 
 
 def render_gap_tests(
@@ -136,7 +154,15 @@ def render_gap_tests(
         and not reqres
         for case in cases
     )
-    needs_json_import = reqres or generic_api
+    toptal = is_toptal(base_url) and generic_api
+    needs_json_import = reqres or any(
+        case.coverage_type == "api"
+        and not automationexercise
+        and not reqres
+        and case.api_details
+        and bool(str(case.api_details.get("response_payload", "")).strip())
+        for case in cases
+    )
 
     helper_imports: list[str] = []
     if include_ui_helpers:
@@ -145,7 +171,9 @@ def render_gap_tests(
         helper_imports.extend(automationexercise_helper_imports())
     if reqres:
         helper_imports.extend(reqres_helper_imports())
-    elif data_file_name and helper_module_stem:
+    if toptal:
+        helper_imports.extend(browser_fetch_helper_imports())
+    if data_file_name and helper_module_stem:
         helper_imports.append("load_generated_case_data")
 
     header_lines = [
@@ -156,10 +184,20 @@ def render_gap_tests(
     ]
     if needs_json_import:
         header_lines.append("import json")
-    if automationexercise:
+    needs_httpx_import = automationexercise or (
+        generic_api and website_suite_name and not toptal
+    )
+    if needs_httpx_import:
         header_lines.append("import httpx")
     header_lines.append("import pytest")
     header_lines.append("")
+    if toptal:
+        header_lines.extend(
+            [
+                "from coverage_agent.plugins.toptal import sanitize_toptal_response_payload",
+                "",
+            ]
+        )
     if reqres and has_api_cases:
         header_lines.extend(
             [
@@ -180,7 +218,6 @@ def render_gap_tests(
             suite_config_imports.extend(["MOBILE_USER_AGENT", "MOBILE_VIEWPORT"])
         header_lines.extend(
             [
-                "from tests.websites.helpers import require_live_target, resolve_target_url",
                 (
                     f"from tests.websites.{website_suite_name}.suite_config import "
                     + ", ".join(suite_config_imports)
@@ -345,6 +382,9 @@ def scaffold_gap_tests(
                 coverage_type == "api" and is_automationexercise(base_url)
             ),
             include_reqres_helpers=coverage_type == "api" and is_reqres(base_url),
+            include_browser_fetch_helpers=(
+                coverage_type == "api" and is_toptal(base_url)
+            ),
             include_data_loader=bool(data_payload),
         )
         rendered_source = render_gap_tests(

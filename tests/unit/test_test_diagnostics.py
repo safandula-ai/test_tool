@@ -64,7 +64,7 @@ async def test_httpx_diagnostics_capture_form_request_payload():
     assert response_event["payload"] == {"responseCode": 200, "message": "ok"}
 
 
-def test_emit_test_diagnostics_writes_terminal_output():
+def test_emit_test_diagnostics_returns_payload_without_side_effects():
     recorder = TestDiagnosticRecorder("tests/unit/test_example.py::test_case")
     recorder.log_lines.extend(
         [
@@ -102,8 +102,8 @@ def test_emit_test_diagnostics_writes_terminal_output():
     payload = emit_test_diagnostics(Config(), FakeItem(), recorder)
 
     assert payload["outcome"] == "passed"
-    assert terminal_lines
-    assert '"test": "tests/unit/test_example.py::test_case"' in terminal_lines[0]
+    assert terminal_lines == []
+    assert payload["test"] == "tests/unit/test_example.py::test_case"
 
 
 def test_append_report_diagnostics_uses_native_pytest_capture_sections():

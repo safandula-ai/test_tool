@@ -19,6 +19,7 @@ from coverage_agent.template_engine import DynamicSuiteAssembler
 from coverage_agent.__main__ import build_parser, main
 from coverage_agent.plugins.automationexercise import AutomationExerciseScraper
 from coverage_agent.plugins.reqres import ReqResScraper, parse_reqres_markup
+from coverage_agent.plugins.toptal import ToptalScraper, sanitize_toptal_response_payload
 from coverage_agent.plugins import get_scraper
 from config.settings import ROOT
 
@@ -439,18 +440,18 @@ def test_template_page_and_feature_indexes_select_impacted_tests():
             {
                 "type": "ui",
                 "template": "InteractionTemplate",
-                "page": "/login",
-                "feature": "feature:authentication",
-                "file_path": "tests/features/authentication/bdd/test_login_steps.py",
-                "test_function": "test_successful_login",
+                "page": "mock://login-form",
+                "feature": "feature:local-page-contracts",
+                "file_path": "tests/features/authentication/bdd/test_mock_login_contract_steps.py",
+                "test_function": "test_mock_login_form_contract",
             }
         ]
     }
 
     assert DynamicSuiteAssembler.select_tests(
-        coverage, template="InteractionTemplate", feature="feature:authentication"
-    ) == ["tests/features/authentication/bdd/test_login_steps.py::test_successful_login"]
-    assert build_coverage_indexes(coverage)["pages"]["/login"][0]["target"] == "login-submit"
+        coverage, template="InteractionTemplate", feature="feature:local-page-contracts"
+    ) == ["tests/features/authentication/bdd/test_mock_login_contract_steps.py::test_mock_login_form_contract"]
+    assert build_coverage_indexes(coverage)["pages"]["mock://login-form"][0]["target"] == "login-submit"
 
 
 @covers(type="api", target="coverage-agent://gap-scaffolder", priority="high", template="APIContractTemplate")
@@ -557,6 +558,156 @@ def test_gap_scaffolder_generates_api_tests_from_gap_report(tmp_path):
     assert "async def test_generated_api_post_api_checkout" in source
     assert 'response = await api_client.request("POST", url)' in source
     assert "from ._test_generated_api_helpers import (" not in source
+
+
+@covers(type="api", target="coverage-agent://gap-scaffolder/website-suite-api",
+        priority="high", template="APIContractTemplate")
+def test_gap_scaffolder_generates_live_api_tests_for_website_suites(tmp_path):
+    report = tmp_path / "gap_report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "page": "/",
+                "base_url": "https://www.toptal.com",
+                "untested_ui_elements": [],
+                "untested_api_endpoints": [
+                    {
+                        "method": "GET",
+                        "path": "/api/cms/sessions",
+                        "response_code": "200",
+                        "response_payload_kind": "json",
+                        "response_payload": json.dumps(
+                            {
+                                "success": True,
+                                "user": {
+                                    "active": False,
+                                    "email": "<redacted-email>",
+                                    "full_name": "<redacted-name>",
+                                    "role_id": 0,
+                                    "role_type": "Developer",
+                                },
+                                "talent_signup_data": None,
+                            },
+                            sort_keys=True,
+                        ),
+                        "target": "GET /api/cms/sessions",
+                    }
+                ],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "tests" / "websites" / "toptal_com" / "generated" / "test_generated_coverage_gaps.py"
+
+    scaffold_gap_tests(report, output)
+    source = (output.parent / "test_generated_coverage_gaps_api.py").read_text(encoding="utf-8")
+
+    assert "from tests.websites.toptal_com.suite_config import BASE_URL" in source
+    assert "from tests.websites.helpers import require_live_target, resolve_target_url" not in source
+    assert "from coverage_agent.plugins.toptal import sanitize_toptal_response_payload" in source
+    assert "import httpx" not in source
+    assert "from ._test_generated_coverage_gaps_api_helpers import (" in source
+    assert "fetch_json_via_browser," in source
+    assert "expected_payload = json.loads(" in source
+    assert "async with page_factory(BASE_URL) as browser_page:" in source
+    assert "fetch_result = await fetch_json_via_browser(" in source
+    assert 'await browser_page.goto("/")' in source
+    assert 'assert fetch_result["status"] == int(\'200\')' in source
+    assert "payload = sanitize_toptal_response_payload(json.loads(fetch_result[\"text\"]))" in source
+    assert 'test_diagnostics.record(' in source
+    assert '"generated_api_payload"' in source
+    assert 'observed_payload=payload' in source
+    assert 'expected_payload=expected_payload' in source
+    assert "assert payload == expected_payload" in source
+    assert "api_client" not in source
+    compile(source, str(output.parent / "test_generated_coverage_gaps_api.py"), "exec")
+
+
+@covers(type="api", target="coverage-agent://toptal-sanitizer",
+        priority="high", template="APIContractTemplate")
+def test_toptal_sanitizer_redacts_identifying_fields():
+    payload = {
+        "success": True,
+        "user": {
+            "active": False,
+            "email": "user@example.com",
+            "full_name": "Example User",
+            "role_id": 6184862,
+            "role_type": "Developer",
+            "role_types": ["role", "talent", "developer"],
+        },
+        "talent_signup_data": None,
+    }
+
+    assert sanitize_toptal_response_payload(payload) == {
+        "success": True,
+        "user": {
+            "active": False,
+            "email": "<redacted-email>",
+            "full_name": "<redacted-name>",
+            "role_id": 0,
+            "role_type": "Developer",
+            "role_types": ["role", "talent", "developer"],
+        },
+        "talent_signup_data": None,
+    }
+
+
+@covers(type="api", target="coverage-agent://toptal-scraper",
+        priority="high", template="APIContractTemplate")
+def test_toptal_scraper_discovers_and_sanitizes_api_samples():
+    class Page:
+        url = "https://www.toptal.com/"
+
+        async def evaluate(self, script, arg=None):
+            if arg == "https://www.toptal.com":
+                return ["https://www.toptal.com/api/cms/sessions"]
+            if arg == "/api/cms/sessions":
+                return {
+                    "status": 200,
+                    "content_type": "application/json; charset=utf-8",
+                    "text": json.dumps(
+                        {
+                            "success": True,
+                            "user": {
+                                "active": False,
+                                "email": "user@example.com",
+                                "full_name": "Example User",
+                                "role_id": 6184862,
+                                "role_type": "Developer",
+                            },
+                            "talent_signup_data": None,
+                        }
+                    ),
+                }
+            raise AssertionError(f"Unexpected evaluate call: {arg!r}")
+
+    endpoints = asyncio.run(ToptalScraper().scrape(Page()))
+
+    assert endpoints == [
+        {
+            "method": "GET",
+            "path": "/api/cms/sessions",
+            "full_url": "https://www.toptal.com/api/cms/sessions",
+            "response_code": "200",
+            "response_payload_kind": "json",
+            "response_payload": json.dumps(
+                {
+                    "success": True,
+                    "user": {
+                        "active": False,
+                        "email": "<redacted-email>",
+                        "full_name": "<redacted-name>",
+                        "role_id": 0,
+                        "role_type": "Developer",
+                    },
+                    "talent_signup_data": None,
+                },
+                sort_keys=True,
+            ),
+        }
+    ]
 
 
 @covers(type="api", target="coverage-agent://gap-scaffolder/automationexercise",

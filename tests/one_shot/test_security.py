@@ -6,48 +6,56 @@ By default the target comes from `BASE_URL`; pass `--target-url` to override it.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from coverage_agent.decorators import covers
-
-
-DEFAULT_BASE_URL = os.getenv("BASE_URL") or None
-SECURITY_SEARCH_PATH = os.getenv("ONE_SHOT_SECURITY_SEARCH_PATH", "/")
-SECURITY_SEARCH_INPUT_SELECTOR = os.getenv(
-    "ONE_SHOT_SECURITY_SEARCH_INPUT_SELECTOR",
-    "input[type='search'], input[name='search'], input[type='text']",
-)
-SECURITY_SEARCH_SUBMIT_SELECTOR = os.getenv(
-    "ONE_SHOT_SECURITY_SEARCH_SUBMIT_SELECTOR",
-    "button[type='submit'], input[type='submit']",
-)
-SECURITY_CONSENT_ROOT_SELECTOR = os.getenv("ONE_SHOT_SECURITY_CONSENT_ROOT_SELECTOR", ".fc-consent-root")
-SECURITY_CONSENT_ACCEPT_SELECTOR = os.getenv(
-    "ONE_SHOT_SECURITY_CONSENT_ACCEPT_SELECTOR",
-    ".fc-cta-consent, button:has-text('Consent'), button:has-text('Accept')",
+from tests.one_shot.suite_config import (
+    BASE_URL,
+    SECURITY_CONSENT_ACCEPT_SELECTOR,
+    SECURITY_CONSENT_ROOT_SELECTOR,
+    SECURITY_SEARCH_INPUT_SELECTOR,
+    SECURITY_SEARCH_PATH,
+    SECURITY_SEARCH_SUBMIT_SELECTOR,
+    SUITE_NAME,
 )
 
 
 def _target_url(pytestconfig):
-    target_url = pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL
+    target_url = pytestconfig.getoption("--target-url") or BASE_URL
     return target_url.rstrip("/")
 
 
 def _require_live_target(pytestconfig):
-    if not (pytestconfig.getoption("--target-url") or DEFAULT_BASE_URL):
+    if not (pytestconfig.getoption("--target-url") or BASE_URL):
         pytest.skip("Set BASE_URL or pass --target-url")
 
 
-async def _dismiss_consent_if_present(page) -> None:
+async def _dismiss_consent_if_present(page, test_diagnostics) -> None:
     root = page.locator(SECURITY_CONSENT_ROOT_SELECTOR).first
     if await root.count() == 0:
+        test_diagnostics.record(
+            "security_consent",
+            action="consent_not_present",
+            payload={"root_selector": SECURITY_CONSENT_ROOT_SELECTOR},
+        )
         return
     accept_button = page.locator(SECURITY_CONSENT_ACCEPT_SELECTOR).first
     if await accept_button.is_visible():
+        test_diagnostics.record(
+            "security_consent",
+            action="click_accept",
+            payload={
+                "root_selector": SECURITY_CONSENT_ROOT_SELECTOR,
+                "accept_selector": SECURITY_CONSENT_ACCEPT_SELECTOR,
+            },
+        )
         await accept_button.click(force=True)
     if await root.is_visible():
+        test_diagnostics.record(
+            "security_consent",
+            action="remove_overlay",
+            payload={"root_selector": SECURITY_CONSENT_ROOT_SELECTOR},
+        )
         await page.evaluate(
             """(rootSelector) => {
                 const root = document.querySelector(rootSelector);
@@ -83,15 +91,47 @@ async def test_search_rejects_reflected_xss_payload(
     _require_live_target(pytestconfig)
     base_url = _target_url(pytestconfig)
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
+    test_diagnostics.record(
+        "test_surface",
+        mode="live_page",
+        url=base_url,
+        payload={
+            "suite": SUITE_NAME,
+            "route": SECURITY_SEARCH_PATH,
+            "search_input_selector": SECURITY_SEARCH_INPUT_SELECTOR,
+            "search_submit_selector": SECURITY_SEARCH_SUBMIT_SELECTOR,
+        },
+    )
 
     async with page_factory(base_url) as page:
+        test_diagnostics.record(
+            "journey_step",
+            step="open_search_surface",
+            payload={"route": SECURITY_SEARCH_PATH},
+        )
         await page.goto(SECURITY_SEARCH_PATH, wait_until="domcontentloaded")
-        await _dismiss_consent_if_present(page)
+        await _dismiss_consent_if_present(page, test_diagnostics)
         await page.wait_for_load_state("networkidle")
         search_input = page.locator(SECURITY_SEARCH_INPUT_SELECTOR).first
         search_submit = page.locator(SECURITY_SEARCH_SUBMIT_SELECTOR).first
-        if await search_input.count() == 0 or await search_submit.count() == 0:
+        search_input_count = await search_input.count()
+        search_submit_count = await search_submit.count()
+        test_diagnostics.record(
+            "security_search_controls",
+            payload={
+                "search_input_selector": SECURITY_SEARCH_INPUT_SELECTOR,
+                "search_input_count": search_input_count,
+                "search_submit_selector": SECURITY_SEARCH_SUBMIT_SELECTOR,
+                "search_submit_count": search_submit_count,
+            },
+        )
+        if search_input_count == 0 or search_submit_count == 0:
             pytest.skip("Search controls are not available on the target page")
+        test_diagnostics.record(
+            "journey_step",
+            step="submit_xss_probe",
+            payload={"probe_payload": xss_payload},
+        )
         await search_input.fill(xss_payload)
         await search_submit.click(force=True)
         await page.wait_for_load_state("networkidle")
@@ -142,8 +182,23 @@ async def test_http_security_defense_headers(
         "x-frame-options": "clickjacking mitigation",
         "content-security-policy": "content security policy",
     }
+    test_diagnostics.record(
+        "test_surface",
+        mode="live_page",
+        url=base_url,
+        payload={
+            "suite": SUITE_NAME,
+            "route": "/",
+            "required_headers": required_headers,
+        },
+    )
 
     async with page_factory(base_url) as page:
+        test_diagnostics.record(
+            "journey_step",
+            step="open_headers_audit_route",
+            payload={"route": "/"},
+        )
         response = await page.goto("/", wait_until="domcontentloaded")
         assert response is not None, "Navigation completed without an HTTP response"
         headers = await response.all_headers()
@@ -156,6 +211,7 @@ async def test_http_security_defense_headers(
     test_diagnostics.record(
         "security_headers_audit",
         route="/",
+        payload={"required_headers": required_headers},
         missing_headers=missing_headers,
         present_headers=sorted(
             header_name for header_name in required_headers if header_name in headers

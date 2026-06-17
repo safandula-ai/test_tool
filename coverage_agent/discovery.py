@@ -6,10 +6,16 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from playwright.async_api import Page, Request, TimeoutError as PlaywrightTimeoutError, async_playwright
+from playwright.async_api import (
+    Error as PlaywrightError,
+    Page,
+    Request,
+    TimeoutError as PlaywrightTimeoutError,
+    async_playwright,
+)
 from playwright_stealth import Stealth
 
 from config.settings import ROOT, get_settings
@@ -41,6 +47,22 @@ class PlaywrightDiscoveryEngine:
         self.discovery_mode = "live_page"
         self.settings = get_settings()
         self.scraper = get_scraper(base_url)
+
+    def _merge_discovered_api_endpoints(
+        self,
+        scraped_endpoints: list[dict[str, str]],
+    ) -> None:
+        """Merge scraper-enriched endpoints with network-observed signatures."""
+        merged_by_signature: dict[tuple[str, str], dict[str, str]] = {}
+        for endpoint in self.discovered_api_endpoints:
+            signature = (endpoint["method"], endpoint["path"])
+            merged_by_signature[signature] = dict(endpoint)
+        for endpoint in scraped_endpoints:
+            signature = (endpoint["method"], endpoint["path"])
+            merged = dict(merged_by_signature.get(signature, {}))
+            merged.update(endpoint)
+            merged_by_signature[signature] = merged
+        self.discovered_api_endpoints = list(merged_by_signature.values())
 
     async def handle_cookie_banner(self, page: Page) -> None:
         """Dismiss a common consent banner when one is visible."""
@@ -117,6 +139,40 @@ class PlaywrightDiscoveryEngine:
         if any(token in url.lower() for token in IGNORED_NETWORK_TOKENS):
             return None
         return {"method": method.upper(), "path": parsed.path}
+
+    def _navigation_candidates(self, target_path: str) -> list[str]:
+        """Build candidate absolute URLs for the initial navigation."""
+        parsed = urlsplit(self.base_url)
+        path = f"/{target_path.lstrip('/')}"
+        candidates = [urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))]
+        if parsed.netloc.startswith("www."):
+            apex_netloc = parsed.netloc[4:]
+            candidates.append(urlunsplit((parsed.scheme, apex_netloc, path, "", "")))
+        return candidates
+
+    async def _goto_with_dns_fallback(self, page: Page, target_path: str) -> None:
+        """Navigate to the target path, retrying the apex host on DNS failure."""
+        last_error: Exception | None = None
+        candidates = self._navigation_candidates(target_path)
+        for index, candidate in enumerate(candidates):
+            try:
+                await page.goto(candidate, wait_until="domcontentloaded")
+            except PlaywrightError as exc:
+                last_error = exc
+                is_last_candidate = index == len(candidates) - 1
+                should_retry_apex = (
+                    "ERR_NAME_NOT_RESOLVED" in str(exc)
+                    and not is_last_candidate
+                )
+                if should_retry_apex:
+                    continue
+                raise
+            else:
+                parsed = urlsplit(candidate)
+                self.base_url = urlunsplit((parsed.scheme, parsed.netloc, "", "", "")).rstrip("/")
+                return
+        if last_error is not None:
+            raise last_error
 
     def documentation_source_path(self, file_name: str) -> Path:
         """Resolve a documentation source file inside the plugin source directory."""
@@ -374,10 +430,7 @@ class PlaywrightDiscoveryEngine:
             page.on("request", lambda request: asyncio.create_task(filter_and_monitor(request)))
 
             try:
-                await page.goto(
-                    f"{self.base_url}/{target_path.lstrip('/')}",
-                    wait_until="domcontentloaded",
-                )
+                await self._goto_with_dns_fallback(page, target_path)
                 challenge_cleared = await self.handle_security_challenges(
                     page,
                     timeout_ms=challenge_timeout_ms,
@@ -385,7 +438,11 @@ class PlaywrightDiscoveryEngine:
                 if challenge_cleared:
                     await self.handle_cookie_banner(page)
                     if self.scraper:
-                        self.discovered_api_endpoints = await self.scraper.scrape(page)
+                        self._merge_discovered_api_endpoints(await self.scraper.scrape(page))
+                        self.discovered_api_endpoints = await self.scraper.enrich_endpoints(
+                            page,
+                            self.discovered_api_endpoints,
+                        )
                     await self.execute_progressive_multi_pass_scan(
                         page,
                         distance=scan_distance,

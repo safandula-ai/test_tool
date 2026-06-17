@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from coverage_agent.plugins import get_suite_plugin
+
 
 SUITE_DIRECTORIES = ("api", "ui", "smoke", "performance", "security", "generated")
 
@@ -23,7 +25,6 @@ import pytest
 from playwright.async_api import async_playwright, expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
 from tests.websites.{suite_name}.suite_config import (
     BASE_URL,
     SMOKE_HEALTH_PATH,
@@ -49,11 +50,7 @@ from utils.smoke_diagnostics import emit_smoke_diagnostics
 )
 async def test_backend_gateway_health(pytestconfig, settings):
     """Probe the backend without launching a browser rendering context."""
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
         try:
@@ -97,11 +94,7 @@ async def test_backend_gateway_health(pytestconfig, settings):
 )
 async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
     """Fail quickly when navigation or the critical application shell is unavailable."""
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     async with page_factory(base_url) as page:
         started = perf_counter()
         response = await page.goto(
@@ -134,7 +127,6 @@ def render_performance_test_source(suite_name: str) -> str:
     """Render reusable performance checks for a website suite."""
     return f'''"""Performance tests for this website suite."""
 
-import os
 import time
 from time import perf_counter
 
@@ -143,13 +135,31 @@ import pytest
 from playwright.async_api import expect
 
 from coverage_agent.decorators import covers
-from tests.websites.helpers import require_live_target, resolve_target_url
+from tests.websites.performance_helpers import (
+    MobileThrottleProfile,
+    apply_mobile_throttle,
+    measure_time_series,
+    metric_medians,
+    performance_sample_plan,
+    read_navigation_metrics,
+)
 from tests.websites.{suite_name}.suite_config import (
     BASE_URL,
     PERF_HOME_PATH,
     PERF_HOME_READY_SELECTOR,
     PERF_MOBILE_PATH,
     PERF_MOBILE_READY_SELECTOR,
+    PERFORMANCE_MAX_RESPONSE_MS,
+    PERFORMANCE_MAX_LOAD_MS,
+    PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS,
+    PERFORMANCE_MAX_TTFB_MS,
+    PERFORMANCE_MOBILE_CPU_THROTTLE_RATE,
+    PERFORMANCE_MOBILE_DOWNLOAD_KBPS,
+    PERFORMANCE_MOBILE_LATENCY_MS,
+    PERFORMANCE_MOBILE_PROFILE_NAME,
+    PERFORMANCE_MOBILE_UPLOAD_KBPS,
+    PERFORMANCE_SAMPLE_COUNT,
+    PERFORMANCE_WARMUP_RUNS,
 )
 from utils.test_diagnostics import httpx_event_hooks
 
@@ -158,26 +168,44 @@ from utils.test_diagnostics import httpx_event_hooks
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_target_response_time(
-    pytestconfig,
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    target_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
+    target_url = BASE_URL
+    maximum_ms = PERFORMANCE_MAX_RESPONSE_MS
+    warmup_runs, sample_count = performance_sample_plan(
+        warmup_runs=PERFORMANCE_WARMUP_RUNS,
+        sample_count=PERFORMANCE_SAMPLE_COUNT,
     )
-    maximum_ms = float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))
-    started = time.perf_counter()
+
     async with httpx.AsyncClient(
         timeout=settings.http_timeout,
         follow_redirects=True,
         event_hooks=httpx_event_hooks(test_diagnostics),
     ) as client:
-        response = await client.get(target_url)
-    elapsed_ms = (time.perf_counter() - started) * 1000
-    assert response.status_code < 500
-    assert elapsed_ms <= maximum_ms, f"Response took {{elapsed_ms:.1f}} ms; limit is {{maximum_ms:.1f}} ms"
+        async def measure_once() -> float:
+            started = time.perf_counter()
+            response = await client.get(target_url)
+            assert response.status_code < 500
+            return (time.perf_counter() - started) * 1000
+
+        series = await measure_time_series(
+            measure_once,
+            warmup_runs=warmup_runs,
+            sample_count=sample_count,
+        )
+
+    test_diagnostics.record(
+        "performance_response_time",
+        target_url=target_url,
+        warmup_ms=list(series.warmup_ms),
+        sample_ms=list(series.sample_ms),
+        median_ms=series.median_ms,
+    )
+    assert series.median_ms <= maximum_ms, (
+        f"Median response time {{series.median_ms:.1f}} ms exceeds "
+        f"{{maximum_ms:.1f}} ms across {{sample_count}} sample(s)"
+    )
 
 
 @pytest.mark.performance
@@ -193,51 +221,36 @@ async def test_target_response_time(
 )
 async def test_homepage_navigation_performance_metrics(
     page_factory,
-    pytestconfig,
-    settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
+    base_url = BASE_URL
+    max_ttfb_ms = PERFORMANCE_MAX_TTFB_MS
+    max_load_ms = PERFORMANCE_MAX_LOAD_MS
+    warmup_runs, sample_count = performance_sample_plan(
+        warmup_runs=PERFORMANCE_WARMUP_RUNS,
+        sample_count=PERFORMANCE_SAMPLE_COUNT,
     )
-    max_ttfb_ms = float(os.getenv("PERFORMANCE_MAX_TTFB_MS", "800"))
-    max_load_ms = float(os.getenv("PERFORMANCE_MAX_LOAD_MS", "3000"))
 
-    async with page_factory(base_url) as page:
-        response = await page.goto(PERF_HOME_PATH, wait_until="load")
-        assert response is not None and response.ok
-        await expect(page.locator(PERF_HOME_READY_SELECTOR).first).to_be_visible(timeout=5000)
-        await page.wait_for_load_state("networkidle")
-        metrics = await page.evaluate(
-            """() => {{
-                const nav = performance.getEntriesByType("navigation")[0];
-                if (nav) {{
-                    return {{
-                        time_to_first_byte_ms: nav.responseStart,
-                        dom_content_loaded_ms: nav.domContentLoadedEventEnd,
-                        load_event_complete_ms: nav.loadEventEnd,
-                    }};
-                }}
-                const timing = performance.timing;
-                const navigationStart = timing.navigationStart;
-                return {{
-                    time_to_first_byte_ms: timing.responseStart - navigationStart,
-                    dom_content_loaded_ms: timing.domContentLoadedEventEnd - navigationStart,
-                    load_event_complete_ms: timing.loadEventEnd - navigationStart,
-                }};
-            }}"""
-        )
-    test_diagnostics.record("performance_metrics", route=PERF_HOME_PATH, **metrics)
-    assert metrics["time_to_first_byte_ms"] < max_ttfb_ms, (
-        f"SLA violation: TTFB {{metrics['time_to_first_byte_ms']:.1f}} ms exceeds "
-        f"{{max_ttfb_ms:.1f}} ms"
+    async def measure_once() -> dict[str, float]:
+        async with page_factory(base_url) as page:
+            response = await page.goto(PERF_HOME_PATH, wait_until="load")
+            assert response is not None and response.ok
+            await expect(page.locator(PERF_HOME_READY_SELECTOR).first).to_be_visible(timeout=5000)
+            await page.wait_for_load_state("networkidle")
+            return await read_navigation_metrics(page)
+
+    warmup_metrics = [await measure_once() for _ in range(warmup_runs)]
+    metric_samples = [await measure_once() for _ in range(sample_count)]
+    metrics = metric_medians(metric_samples)
+    test_diagnostics.record(
+        "performance_metrics",
+        route=PERF_HOME_PATH,
+        warmup=warmup_metrics,
+        samples=metric_samples,
+        medians=metrics,
     )
-    assert metrics["load_event_complete_ms"] < max_load_ms, (
-        f"SLA violation: full load {{metrics['load_event_complete_ms']:.1f}} ms exceeds "
-        f"{{max_load_ms:.1f}} ms"
-    )
+    assert metrics["time_to_first_byte_ms"] < max_ttfb_ms
+    assert metrics["load_event_complete_ms"] < max_load_ms
 
 
 @pytest.mark.performance
@@ -253,47 +266,51 @@ async def test_homepage_navigation_performance_metrics(
 )
 async def test_route_renders_under_mobile_throttling(
     page_factory,
-    pytestconfig,
-    settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
+    base_url = BASE_URL
+    max_interactive_ms = PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS
+    warmup_runs, sample_count = performance_sample_plan(
+        warmup_runs=PERFORMANCE_WARMUP_RUNS,
+        sample_count=PERFORMANCE_SAMPLE_COUNT,
     )
-    max_interactive_ms = float(os.getenv("PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS", "10000"))
+    mobile_profile = MobileThrottleProfile(
+        latency_ms=PERFORMANCE_MOBILE_LATENCY_MS,
+        download_kbps=PERFORMANCE_MOBILE_DOWNLOAD_KBPS,
+        upload_kbps=PERFORMANCE_MOBILE_UPLOAD_KBPS,
+        cpu_throttle_rate=PERFORMANCE_MOBILE_CPU_THROTTLE_RATE,
+        profile_name=PERFORMANCE_MOBILE_PROFILE_NAME,
+    )
 
-    async with page_factory(base_url) as page:
-        client = await page.context.new_cdp_session(page)
-        await client.send("Network.enable")
-        await client.send(
-            "Network.emulateNetworkConditions",
-            {{
-                "offline": False,
-                "latency": 300,
-                "downloadThroughput": 400 * 1024 // 8,
-                "uploadThroughput": 150 * 1024 // 8,
-            }},
-        )
-        await client.send("Emulation.setCPUThrottlingRate", {{"rate": 4}})
-        started = perf_counter()
-        response = await page.goto(PERF_MOBILE_PATH, wait_until="domcontentloaded")
-        assert response is not None and response.ok
-        await expect(page.locator(PERF_MOBILE_READY_SELECTOR).first).to_be_visible(
-            timeout=max_interactive_ms
-        )
-        elapsed_ms = (perf_counter() - started) * 1000
-        test_diagnostics.record(
-            "performance_mobile_throttling",
-            route=PERF_MOBILE_PATH,
-            interactive_ms=elapsed_ms,
-            cpu_throttle_rate=4,
-            network_profile="slow_3g_like",
-        )
-        assert elapsed_ms <= max_interactive_ms, (
-            f"Interactive time {{elapsed_ms:.1f}} ms exceeds {{max_interactive_ms:.1f}} ms"
-        )
+    async def measure_once() -> float:
+        async with page_factory(base_url) as page:
+            await apply_mobile_throttle(page, mobile_profile)
+            started = perf_counter()
+            response = await page.goto(PERF_MOBILE_PATH, wait_until="domcontentloaded")
+            assert response is not None and response.ok
+            await expect(page.locator(PERF_MOBILE_READY_SELECTOR).first).to_be_visible(
+                timeout=max_interactive_ms
+            )
+            return (perf_counter() - started) * 1000
+
+    series = await measure_time_series(
+        measure_once,
+        warmup_runs=warmup_runs,
+        sample_count=sample_count,
+    )
+    test_diagnostics.record(
+        "performance_mobile_throttling",
+        route=PERF_MOBILE_PATH,
+        warmup_ms=list(series.warmup_ms),
+        sample_ms=list(series.sample_ms),
+        median_ms=series.median_ms,
+        cpu_throttle_rate=mobile_profile.cpu_throttle_rate,
+        network_profile=mobile_profile.profile_name,
+    )
+    assert series.median_ms <= max_interactive_ms, (
+        f"Median interactive time {{series.median_ms:.1f}} ms exceeds "
+        f"{{max_interactive_ms:.1f}} ms across {{sample_count}} sample(s)"
+    )
 '''
 
 
@@ -308,17 +325,19 @@ import pytest
 from coverage_agent.decorators import covers
 from tests.websites.helpers import (
     dismiss_consent_if_present,
-    require_live_target,
-    resolve_target_url,
 )
 from tests.websites.{suite_name}.suite_config import (
     BASE_URL,
     SECURITY_CONSENT_ACCEPT_SELECTOR,
     SECURITY_CONSENT_OVERLAY_SELECTOR,
     SECURITY_CONSENT_ROOT_SELECTOR,
+    SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR,
+    SECURITY_SEARCH_PANEL_SELECTOR,
     SECURITY_SEARCH_INPUT_SELECTOR,
     SECURITY_SEARCH_PATH,
     SECURITY_SEARCH_SUBMIT_SELECTOR,
+    SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR,
+    SECURITY_SEARCH_TRIGGER_SELECTOR,
 )
 
 
@@ -339,11 +358,7 @@ async def test_search_rejects_reflected_xss_payload(
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     xss_payload = '<script id="malicious-xss">window.__xss_executed = true;</script>'
 
     async with page_factory(base_url) as page:
@@ -355,8 +370,35 @@ async def test_search_rejects_reflected_xss_payload(
             overlay_selector=SECURITY_CONSENT_OVERLAY_SELECTOR,
         )
         await page.wait_for_load_state("networkidle")
+        trigger_found = False
+        if SECURITY_SEARCH_TRIGGER_SELECTOR:
+            search_trigger = page.locator(SECURITY_SEARCH_TRIGGER_SELECTOR).first
+            trigger_found = await search_trigger.count() > 0
+            if trigger_found:
+                await search_trigger.click(force=True)
+                if SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR:
+                    await page.locator(SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR).first.wait_for(
+                        state="visible",
+                        timeout=5_000,
+                    )
+                if SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR:
+                    await page.locator(SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR).first.wait_for(
+                        state="visible",
+                        timeout=5_000,
+                    )
         search_input = page.locator(SECURITY_SEARCH_INPUT_SELECTOR).first
         search_submit = page.locator(SECURITY_SEARCH_SUBMIT_SELECTOR).first
+        test_diagnostics.record(
+            "security_search_activation",
+            route=SECURITY_SEARCH_PATH,
+            trigger_found=trigger_found,
+            trigger_selector=SECURITY_SEARCH_TRIGGER_SELECTOR,
+            trigger_active_selector=SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR,
+            panel_selector=SECURITY_SEARCH_PANEL_SELECTOR,
+            panel_active_selector=SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR,
+            input_count=await search_input.count(),
+            submit_count=await search_submit.count(),
+        )
         if await search_input.count() == 0 or await search_submit.count() == 0:
             pytest.skip("Search controls are not available on the target page")
         await search_input.fill(xss_payload)
@@ -403,11 +445,7 @@ async def test_http_security_defense_headers(
     settings,
     test_diagnostics,
 ):
-    require_live_target(pytestconfig, settings)
-    base_url = resolve_target_url(
-        pytestconfig,
-        default_base_url=BASE_URL,
-    )
+    base_url = BASE_URL
     required_headers = {{
         "strict-transport-security": "HSTS protocol enforcement",
         "x-frame-options": "clickjacking mitigation",
@@ -467,6 +505,62 @@ def website_slug(base_url: str) -> str:
     return slug or "website"
 
 
+def render_suite_config_source(
+    normalized_url: str,
+    name: str,
+    overrides: dict[str, object] | None = None,
+) -> str:
+    """Render the default suite configuration for a website suite."""
+    defaults = {
+        "SECURITY_SEARCH_TRIGGER_SELECTOR": "",
+        "SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR": "",
+        "SECURITY_SEARCH_PANEL_SELECTOR": "",
+        "SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR": "",
+    }
+    defaults.update(overrides or {})
+    source = (
+        '"""Website-specific suite configuration."""\n\n'
+        "import os\n\n"
+        f"BASE_URL = {json.dumps(normalized_url)}\n"
+        f"SUITE_NAME = {json.dumps(name)}\n"
+        'SMOKE_HEALTH_PATH = "/"\n'
+        "SMOKE_HEALTH_STATUS = 200\n"
+        'SMOKE_ROOT_PATH = "/"\n'
+        'SMOKE_ROOT_SELECTOR = "body"\n'
+        "SMOKE_REQUEST_TIMEOUT_MS = 5_000\n"
+        "SMOKE_RENDER_TIMEOUT_MS = 8_000\n"
+        'PERF_HOME_PATH = "/"\n'
+        'PERF_HOME_READY_SELECTOR = "body"\n'
+        'PERF_MOBILE_PATH = "/"\n'
+        'PERF_MOBILE_READY_SELECTOR = "body"\n'
+        'PERFORMANCE_MAX_RESPONSE_MS = float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))\n'
+        'PERFORMANCE_MAX_TTFB_MS = float(os.getenv("PERFORMANCE_MAX_TTFB_MS", "800"))\n'
+        'PERFORMANCE_MAX_LOAD_MS = float(os.getenv("PERFORMANCE_MAX_LOAD_MS", "3000"))\n'
+        'PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS = float(os.getenv("PERFORMANCE_MAX_MOBILE_INTERACTIVE_MS", "10000"))\n'
+        'PERFORMANCE_WARMUP_RUNS = int(os.getenv("PERFORMANCE_WARMUP_RUNS", "1"))\n'
+        'PERFORMANCE_SAMPLE_COUNT = int(os.getenv("PERFORMANCE_SAMPLE_COUNT", "3"))\n'
+        'PERFORMANCE_MOBILE_LATENCY_MS = int(os.getenv("PERFORMANCE_MOBILE_LATENCY_MS", "300"))\n'
+        'PERFORMANCE_MOBILE_DOWNLOAD_KBPS = int(os.getenv("PERFORMANCE_MOBILE_DOWNLOAD_KBPS", "400"))\n'
+        'PERFORMANCE_MOBILE_UPLOAD_KBPS = int(os.getenv("PERFORMANCE_MOBILE_UPLOAD_KBPS", "150"))\n'
+        'PERFORMANCE_MOBILE_CPU_THROTTLE_RATE = int(os.getenv("PERFORMANCE_MOBILE_CPU_THROTTLE_RATE", "4"))\n'
+        'PERFORMANCE_MOBILE_PROFILE_NAME = os.getenv("PERFORMANCE_MOBILE_PROFILE_NAME", "slow_3g_like")\n'
+        'SECURITY_SEARCH_PATH = "/"\n'
+        f"SECURITY_SEARCH_TRIGGER_SELECTOR = {json.dumps(defaults['SECURITY_SEARCH_TRIGGER_SELECTOR'])}\n"
+        f"SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR = {json.dumps(defaults['SECURITY_SEARCH_TRIGGER_ACTIVE_SELECTOR'])}\n"
+        f"SECURITY_SEARCH_PANEL_SELECTOR = {json.dumps(defaults['SECURITY_SEARCH_PANEL_SELECTOR'])}\n"
+        f"SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR = {json.dumps(defaults['SECURITY_SEARCH_PANEL_ACTIVE_SELECTOR'])}\n"
+        'SECURITY_SEARCH_INPUT_SELECTOR = "input[type=\'search\'], input[name=\'search\'], input[type=\'text\']"\n'
+        'SECURITY_SEARCH_SUBMIT_SELECTOR = "button[type=\'submit\'], input[type=\'submit\']"\n'
+        'SECURITY_CONSENT_ROOT_SELECTOR = ".fc-consent-root"\n'
+        'SECURITY_CONSENT_ACCEPT_SELECTOR = (\n'
+        '    ".fc-cta-consent, button:has-text(\'Consent\'), "\n'
+        '    "button:has-text(\'Accept\')"\n'
+        ')\n'
+        'SECURITY_CONSENT_OVERLAY_SELECTOR = ".fc-dialog-overlay"\n'
+    )
+    return source
+
+
 def ensure_website_suite(
     base_url: str,
     tests_root: str | Path = "tests/websites",
@@ -475,6 +569,8 @@ def ensure_website_suite(
     normalized_url = base_url.rstrip("/")
     name = website_slug(normalized_url)
     root = Path(tests_root) / name
+    suite_plugin = get_suite_plugin(normalized_url)
+    suite_overrides = suite_plugin.suite_config_overrides() if suite_plugin is not None else {}
     package_paths = [Path(tests_root), root, *(root / item for item in SUITE_DIRECTORIES)]
     for path in package_paths:
         path.mkdir(parents=True, exist_ok=True)
@@ -483,30 +579,10 @@ def ensure_website_suite(
             init_file.write_text("", encoding="utf-8")
 
     config_file = root / "suite_config.py"
-    if not config_file.exists():
+    config_source = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
+    if not config_file.exists() or "PERFORMANCE_MAX_RESPONSE_MS" not in config_source:
         config_file.write_text(
-            '"""Website-specific suite configuration."""\n\n'
-            f"BASE_URL = {json.dumps(normalized_url)}\n"
-            f"SUITE_NAME = {json.dumps(name)}\n"
-            'SMOKE_HEALTH_PATH = "/"\n'
-            "SMOKE_HEALTH_STATUS = 200\n"
-            'SMOKE_ROOT_PATH = "/"\n'
-            'SMOKE_ROOT_SELECTOR = "body"\n'
-            "SMOKE_REQUEST_TIMEOUT_MS = 5_000\n"
-            "SMOKE_RENDER_TIMEOUT_MS = 8_000\n"
-            'PERF_HOME_PATH = "/"\n'
-            'PERF_HOME_READY_SELECTOR = "body"\n'
-            'PERF_MOBILE_PATH = "/"\n'
-            'PERF_MOBILE_READY_SELECTOR = "body"\n'
-            'SECURITY_SEARCH_PATH = "/"\n'
-            'SECURITY_SEARCH_INPUT_SELECTOR = "input[type=\'search\'], input[name=\'search\'], input[type=\'text\']"\n'
-            'SECURITY_SEARCH_SUBMIT_SELECTOR = "button[type=\'submit\'], input[type=\'submit\']"\n'
-            'SECURITY_CONSENT_ROOT_SELECTOR = ".fc-consent-root"\n'
-            'SECURITY_CONSENT_ACCEPT_SELECTOR = (\n'
-            '    ".fc-cta-consent, button:has-text(\'Consent\'), "\n'
-            '    "button:has-text(\'Accept\')"\n'
-            ')\n'
-            'SECURITY_CONSENT_OVERLAY_SELECTOR = ".fc-dialog-overlay"\n',
+            render_suite_config_source(normalized_url, name, suite_overrides),
             encoding="utf-8",
         )
 
@@ -522,11 +598,19 @@ def ensure_website_suite(
         smoke_file.write_text(render_smoke_test_source(name), encoding="utf-8")
 
     performance_file = root / "performance" / "test_performance.py"
-    if not performance_file.exists():
+    performance_source = performance_file.read_text(encoding="utf-8") if performance_file.exists() else ""
+    if not performance_file.exists() or any(
+        marker in performance_source
+        for marker in (
+            "from tests.websites.helpers import require_live_target, resolve_target_url",
+            'float(os.getenv("PERFORMANCE_MAX_RESPONSE_MS", "5000"))',
+        )
+    ):
         performance_file.write_text(render_performance_test_source(name), encoding="utf-8")
 
     security_file = root / "security" / "test_security.py"
-    if not security_file.exists():
+    security_source = security_file.read_text(encoding="utf-8") if security_file.exists() else ""
+    if not security_file.exists() or "require_live_target" in security_source:
         security_file.write_text(render_security_test_source(name), encoding="utf-8")
 
     return WebsiteSuite(name=name, base_url=normalized_url, root=root)

@@ -187,6 +187,11 @@ def is_reqres(base_url: str | None) -> bool:
     return bool(base_url and "reqres.in" in base_url.lower())
 
 
+def is_toptal(base_url: str | None) -> bool:
+    """Return whether the current scaffold target is Toptal."""
+    return bool(base_url and "toptal.com" in base_url.lower())
+
+
 def render_covers_decorator(
     *,
     coverage_type: str,

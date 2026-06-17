@@ -1,19 +1,13 @@
-"""Reusable one-shot smoke tests for a live website target.
+"""Critical availability smoke tests for this website suite."""
 
-Copy this file into a dedicated website suite and replace the selectors/paths below.
-By default the target comes from `BASE_URL`; pass `--target-url` to override it.
-"""
-
-from __future__ import annotations
-
-from time import perf_counter
 from urllib.parse import urljoin
+from time import perf_counter
 
 import pytest
 from playwright.async_api import async_playwright, expect
 
 from coverage_agent.decorators import covers
-from tests.one_shot.suite_config import (
+from tests.websites.sabre_com.suite_config import (
     BASE_URL,
     SMOKE_HEALTH_PATH,
     SMOKE_HEALTH_STATUS,
@@ -25,30 +19,20 @@ from tests.one_shot.suite_config import (
 from utils.smoke_diagnostics import emit_smoke_diagnostics
 
 
-def _target_url(pytestconfig):
-    target_url = pytestconfig.getoption("--target-url") or BASE_URL
-    return target_url.rstrip("/")
-
-
-def _require_live_target(pytestconfig):
-    if not (pytestconfig.getoption("--target-url") or BASE_URL):
-        pytest.skip("Set BASE_URL or pass --target-url")
-
-
 @pytest.mark.smoke
 @pytest.mark.api
 @pytest.mark.integration
 @pytest.mark.asyncio
 @covers(
     type="api",
-    target="website://one_shot/backend-gateway-health",
+    target="website://sabre_com/backend-gateway-health",
     priority="critical",
     presence="deterministic",
     template="APIContractTemplate",
 )
-async def test_backend_gateway_health(pytestconfig):
-    _require_live_target(pytestconfig)
-    base_url = _target_url(pytestconfig)
+async def test_backend_gateway_health(pytestconfig, settings):
+    """Probe the backend without launching a browser rendering context."""
+    base_url = BASE_URL
     async with async_playwright() as playwright:
         request_context = await playwright.request.new_context(base_url=base_url)
         try:
@@ -63,7 +47,6 @@ async def test_backend_gateway_health(pytestconfig):
             response_headers = response.headers
         finally:
             await request_context.dispose()
-
     emit_smoke_diagnostics(
         pytestconfig,
         check="backend-gateway-health",
@@ -86,14 +69,14 @@ async def test_backend_gateway_health(pytestconfig):
 @pytest.mark.asyncio
 @covers(
     type="ui",
-    target="website://one_shot/homepage-root",
+    target="website://sabre_com/homepage-root",
     priority="critical",
     presence="deterministic",
     template="ComponentVisibilityTemplate",
 )
-async def test_homepage_shell_renders(page_factory, pytestconfig):
-    _require_live_target(pytestconfig)
-    base_url = _target_url(pytestconfig)
+async def test_homepage_shell_renders(page_factory, pytestconfig, settings):
+    """Fail quickly when navigation or the critical application shell is unavailable."""
+    base_url = BASE_URL
     async with page_factory(base_url) as page:
         started = perf_counter()
         response = await page.goto(
@@ -118,4 +101,4 @@ async def test_homepage_shell_renders(page_factory, pytestconfig):
             },
         )
         assert response.ok, f"Homepage returned HTTP {response.status}"
-        await expect(page.locator(SMOKE_ROOT_SELECTOR).first).to_be_visible(timeout=5000)
+        await expect(page.locator(SMOKE_ROOT_SELECTOR).first).to_be_visible(timeout=5_000)

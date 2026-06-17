@@ -6,19 +6,20 @@ import pytest
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 from config.settings import Settings, get_settings
+from tests.websites.saucedemo_com.suite_config import BASE_URL
 from utils.smoke_diagnostics import sanitize_headers
 from utils.test_diagnostics import TestDiagnosticRecorder
 
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
-    """Expose shared runtime settings to BDD scenarios."""
+    """Expose shared runtime settings to SauceDemo BDD scenarios."""
     return get_settings()
 
 
 @pytest.fixture
 def sync_browser(settings: Settings) -> Iterator[Browser]:
-    """Start an isolated synchronous browser for a BDD scenario."""
+    """Start a synchronous browser for one live SauceDemo scenario."""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=settings.headless, slow_mo=settings.slow_mo)
         yield browser
@@ -28,14 +29,14 @@ def sync_browser(settings: Settings) -> Iterator[Browser]:
 @pytest.fixture
 def sync_context(
     sync_browser: Browser,
-    settings: Settings,
     test_diagnostics: TestDiagnosticRecorder,
 ) -> Iterator[BrowserContext]:
-    """Create a browser context for each BDD scenario."""
-    context = sync_browser.new_context(base_url=settings.base_url)
+    """Create an isolated browser context for a live SauceDemo scenario."""
+    context = sync_browser.new_context(base_url=BASE_URL)
     test_diagnostics.record(
         "browser_context_configured",
-        configured_base_url=settings.base_url,
+        configured_base_url=BASE_URL,
+        suite="saucedemo_com",
         execution_mode="sync_playwright",
     )
     yield context
@@ -47,7 +48,7 @@ def sync_page(
     sync_context: BrowserContext,
     test_diagnostics: TestDiagnosticRecorder,
 ) -> Iterator[Page]:
-    """Create a fresh page for a BDD scenario."""
+    """Create a fresh page for a live SauceDemo BDD scenario."""
     page = sync_context.new_page()
     test_diagnostics.record(
         "browser_page_opened",

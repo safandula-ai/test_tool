@@ -98,19 +98,19 @@ async def test_login_fields_enforce_input_constraints(page_factory):
 @pytest.mark.asyncio
 @covers(type="visual", target="signup-form", priority="medium", template="ComponentVisibilityTemplate")
 async def test_signup_form_visual_regression(page_factory, settings):
-    """Compare the signup form with its stored visual baseline."""
+    """Compare the login viewport with its stored visual baseline."""
     base_url = BASE_URL
-    baseline = ROOT / "data" / "visual" / "automation-signup-form.png"
+    baseline = ROOT / "data" / "visual" / "automation-signup-login-viewport.png"
     if not baseline.exists() and not settings.update_visual_baselines:
         pytest.skip("Set UPDATE_VISUAL_BASELINES=true once to create the baseline")
 
     async with page_factory(base_url) as page:
-        await page.goto("/login")
-        signup_form = page.locator(".signup-form")
+        signup = AutomationSignupPage(page)
+        await signup.open()
         await assert_visual_match(
-            signup_form,
+            page,
             baseline=baseline,
-            actual=settings.screenshot_dir / "automation-signup-form.actual.png",
+            actual=settings.screenshot_dir / "automation-signup-login-viewport.actual.png",
             max_changed_pixel_ratio=0.01,
             update_baseline=settings.update_visual_baselines,
         )

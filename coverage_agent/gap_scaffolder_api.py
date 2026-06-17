@@ -6,6 +6,7 @@ from coverage_agent.gap_scaffolder_common import (
     GapCase,
     comment_lines,
     identifier,
+    is_toptal,
     reqres_placeholder_path,
     reqres_placeholder_url,
     wrapped_string_literal,
@@ -65,6 +66,13 @@ def reqres_helper_imports() -> list[str]:
         "load_generated_case_data",
         "reqres_expected_payload_fragment",
         "reqres_request_kwargs",
+    ]
+
+
+def browser_fetch_helper_imports() -> list[str]:
+    """Return helper imports required by browser-backed generated API tests."""
+    return [
+        "fetch_json_via_browser",
     ]
 
 
@@ -368,6 +376,32 @@ def render_reqres_helper_lines() -> list[str]:
     ]
 
 
+def render_browser_fetch_helper_lines() -> list[str]:
+    """Emit generated helper source lines for browser-context API fetches."""
+    return [
+        "",
+        "async def fetch_json_via_browser(",
+        "    page,",
+        "    *,",
+        "    path: str,",
+        "    method: str,",
+        ") -> dict[str, object]:",
+        "    return await page.evaluate(",
+        "        '''async ([path, method]) => {",
+        "            const response = await fetch(path, {",
+        "                method,",
+        "                credentials: \"include\",",
+        "                headers: { Accept: \"application/json\" },",
+        "            });",
+        "            const text = await response.text();",
+        "            return { status: response.status, text };",
+        "        }''',",
+        "        [path, method],",
+        "    )",
+        "",
+    ]
+
+
 def render_data_loader_lines() -> list[str]:
     """Emit the shared JSON sidecar loader used by generated test modules."""
     return [
@@ -446,6 +480,7 @@ def render_api_test_function(
         else "None"
     )
     rendered_path = reqres_placeholder_path(path) if reqres else path
+    toptal = is_toptal(base_url) and website_suite_name == "toptal_com"
     rendered_full_url = (
         wrapped_string_literal(
             reqres_placeholder_url(
@@ -545,8 +580,7 @@ def render_api_test_function(
     rendered_payload = json.dumps(payload, sort_keys=True)
     assert expected_message in rendered_payload"""
                 if has_expected_payload
-                else """payload = response.json()
-    assert isinstance(payload, (dict, list))"""
+                else "assert isinstance(response.json(), (dict, list))"
             )
         elif response_payload_kind_value == "none":
             response_assertion = ""
@@ -556,9 +590,44 @@ def render_api_test_function(
     rendered_payload = json.dumps(payload, sort_keys=True)
     assert {expected_message} in rendered_payload"""
                 if has_expected_payload
-                else "payload = response.json()"
+                else "_ = response.json()"
             )
-        body = f'''{comment_block}    url = f"{{{generic_api_base_url}}}{rendered_path}"
+        if toptal and response_payload_kind_value == "json" and has_expected_payload:
+            expected_payload_literal = wrapped_string_literal(
+                str(case.api_details.get("response_payload", "")).strip(),
+                indent=" " * 8,
+            )
+            body = f'''{comment_block}    expected_payload = json.loads({expected_payload_literal})
+    async with page_factory(BASE_URL) as browser_page:
+        await browser_page.goto("/")
+        fetch_result = await fetch_json_via_browser(
+            browser_page,
+            path={wrapped_string_literal(rendered_path, indent=" " * 12)},
+            method="{method}",
+        )
+    assert fetch_result["status"] == int({expected_code})
+    payload = sanitize_toptal_response_payload(json.loads(fetch_result["text"]))
+    test_diagnostics.record(
+        "generated_api_payload",
+        endpoint={wrapped_string_literal(rendered_path, indent=" " * 12)},
+        method="{method}",
+        status=fetch_result["status"],
+        expected_payload=expected_payload,
+        observed_payload=payload,
+    )
+    assert payload == expected_payload
+'''
+        elif website_suite_name:
+            body = f'''{comment_block}    url = f"{{{generic_api_base_url}}}{rendered_path}"
+    async with httpx.AsyncClient(
+        timeout=settings.http_timeout,
+    ) as live_client:
+        response = await live_client.request("{method}", url)
+        {response_status_assertion}
+        {response_assertion}
+'''
+        else:
+            body = f'''{comment_block}    url = f"{{{generic_api_base_url}}}{rendered_path}"
     response = await api_client.request("{method}", url)
     {response_status_assertion}
     {response_assertion}
@@ -569,6 +638,10 @@ def render_api_test_function(
         if automationexercise
         else "settings, reqres_http_client"
         if reqres
+        else "page_factory, test_diagnostics"
+        if toptal and website_suite_name
+        else "settings"
+        if website_suite_name
         else "api_client"
     )
     return f'''\n{decorator}
